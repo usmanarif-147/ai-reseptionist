@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { checkRateLimit } from '@/lib/rate-limit'
+import { createGeminiClient } from '@/lib/gemini'
+import { buildSystemPrompt } from '@/lib/build-system-prompt'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-const PLACEHOLDER_REPLY =
-  'Thanks for your message! Our AI receptionist will be with you shortly.'
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -111,6 +110,46 @@ export async function POST(
     sessionId = newSession.id
   }
 
+  // Fetch business data and conversation history in parallel
+  const [
+    { data: businessData },
+    { data: services },
+    { data: hours },
+    { data: staff },
+    { data: history },
+  ] = await Promise.all([
+    supabase
+      .from('businesses')
+      .select('name')
+      .eq('id', businessId)
+      .single(),
+    supabase
+      .from('services')
+      .select('name, description, price, duration_minutes')
+      .eq('business_id', businessId),
+    supabase
+      .from('business_hours')
+      .select('day_of_week, open_time, close_time, is_closed')
+      .eq('business_id', businessId)
+      .order('day_of_week'),
+    supabase
+      .from('staff')
+      .select('name, role')
+      .eq('business_id', businessId),
+    supabase
+      .from('chat_messages')
+      .select('role, content')
+      .eq('session_id', sessionId)
+      .order('created_at'),
+  ])
+
+  const systemPrompt = buildSystemPrompt(
+    businessData?.name ?? 'this business',
+    services ?? [],
+    hours ?? [],
+    staff ?? []
+  )
+
   // Persist user message
   await supabase.from('chat_messages').insert({
     session_id: sessionId,
@@ -118,9 +157,13 @@ export async function POST(
     content: trimmedMessage,
   })
 
-  // Stream SSE response
+  // Build conversation contents for Gemini (history before the current message)
+  const conversationHistory = (history ?? []).map((m) => ({
+    role: m.role === 'user' ? 'user' : 'model',
+    parts: [{ text: m.content as string }],
+  }))
+
   const encoder = new TextEncoder()
-  const words = PLACEHOLDER_REPLY.split(' ')
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -129,24 +172,49 @@ export async function POST(
         encoder.encode(`data: ${JSON.stringify({ type: 'session', session_id: sessionId })}\n\n`)
       )
 
-      // Stream tokens word-by-word
-      for (let i = 0; i < words.length; i++) {
-        const token = i < words.length - 1 ? words[i] + ' ' : words[i]
+      let fullReply = ''
+
+      try {
+        const genai = createGeminiClient()
+
+        const geminiStream = await genai.models.generateContentStream({
+          model: 'gemini-2.5-flash',
+          config: { systemInstruction: systemPrompt },
+          contents: [
+            ...conversationHistory,
+            { role: 'user', parts: [{ text: trimmedMessage }] },
+          ],
+        })
+
+        for await (const chunk of geminiStream) {
+          const token = chunk.text
+          if (token) {
+            fullReply += token
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ type: 'token', token })}\n\n`)
+            )
+          }
+        }
+      } catch (err) {
+        console.error('Gemini error:', err)
+        const errorMsg = 'Sorry, I am having trouble responding right now. Please try again.'
+        fullReply = errorMsg
         controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify({ type: 'token', token })}\n\n`)
+          encoder.encode(`data: ${JSON.stringify({ type: 'token', token: errorMsg })}\n\n`)
         )
-        await new Promise((resolve) => setTimeout(resolve, 30))
       }
 
       // Done event
       controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'done' })}\n\n`))
 
-      // Persist assistant reply after streaming
-      await supabase.from('chat_messages').insert({
-        session_id: sessionId,
-        role: 'assistant',
-        content: PLACEHOLDER_REPLY,
-      })
+      // Persist assistant reply
+      if (fullReply) {
+        await supabase.from('chat_messages').insert({
+          session_id: sessionId,
+          role: 'assistant',
+          content: fullReply,
+        })
+      }
 
       controller.close()
     },
