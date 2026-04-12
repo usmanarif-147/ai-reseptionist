@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Widget Test Page</title>
+  <style>
+    body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; }
+    .instructions { background: #f3f4f6; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+    code { background: #e5e7eb; padding: 2px 6px; border-radius: 4px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h1>AI Receptionist Widget — Test Page</h1>
+  <div class="instructions">
+    <h2>Setup Instructions</h2>
+    <ol>
+      <li>Log in to the dashboard at <a href="http://localhost:3000">localhost:3000</a></li>
+      <li>Go to <strong>Widget Settings</strong> in your dashboard</li>
+      <li>Copy your <strong>Business ID</strong> from the embed code shown there</li>
+      <li>Replace <code>YOUR_BUSINESS_ID_HERE</code> in the script tag at the bottom of this file</li>
+      <li>Refresh this page — the chat button should appear in the bottom right corner</li>
+    </ol>
+  </div>
+  <p>This is a sample website page. The AI Receptionist widget should appear in the bottom right corner once configured.</p>
+  <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+
+  <!-- Replace YOUR_BUSINESS_ID_HERE with your actual business UUID from the dashboard -->
+  <script src="http://localhost:3000/widget.js" data-business-id="YOUR_BUSINESS_ID_HERE"></script>
+</body>
+</html>
