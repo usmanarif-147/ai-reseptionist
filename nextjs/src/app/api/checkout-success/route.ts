@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { stripe } from '@/lib/stripe'
-import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function GET(request: NextRequest) {
   const sessionId = request.nextUrl.searchParams.get('session_id')
@@ -30,10 +30,7 @@ export async function GET(request: NextRequest) {
   const subscription = session.subscription as import('stripe').Stripe.Subscription
 
   // Use admin client to bypass RLS when writing subscription data
-  const adminSupabase = createAdminClient(
-    process.env.SUPABASE_INTERNAL_URL || process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  )
+  const adminSupabase = createAdminClient()
 
   // Upsert subscription record
   await adminSupabase.from('subscriptions').upsert({
@@ -48,5 +45,40 @@ export async function GET(request: NextRequest) {
     updated_at: new Date().toISOString(),
   }, { onConflict: 'user_id' })
 
-  return NextResponse.json({ success: true })
+  // Ensure a business record exists for this user
+  const { data: existingBusiness } = await adminSupabase
+    .from('businesses')
+    .select('id')
+    .eq('owner_id', user.id)
+    .single()
+
+  let businessId = existingBusiness?.id
+
+  if (!businessId) {
+    const emailName = (user.email ?? 'My Business').split('@')[0]
+    const { data: newBusiness } = await adminSupabase
+      .from('businesses')
+      .insert({ owner_id: user.id, name: emailName, type: 'other' })
+      .select('id')
+      .single()
+
+    if (newBusiness) {
+      businessId = newBusiness.id
+      await Promise.all([
+        adminSupabase.from('widget_settings').insert({ business_id: businessId }),
+        adminSupabase.from('payment_settings').insert({ business_id: businessId, payment_type: 'cash' }),
+        adminSupabase.from('business_hours').insert(
+          Array.from({ length: 7 }, (_, i) => ({
+            business_id: businessId,
+            day_of_week: i,
+            open_time: i >= 1 && i <= 5 ? '09:00' : null,
+            close_time: i >= 1 && i <= 5 ? '17:00' : null,
+            is_closed: i === 0 || i === 6,
+          }))
+        ),
+      ])
+    }
+  }
+
+  return NextResponse.json({ success: true, businessId })
 }

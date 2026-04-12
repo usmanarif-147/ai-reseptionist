@@ -1,6 +1,22 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+// UUID v4 pattern
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function isBusinessDashboardRoute(pathname: string) {
+  const segments = pathname.split('/').filter(Boolean)
+  return segments.length >= 2 && UUID_REGEX.test(segments[0]) && segments[1] === 'dashboard'
+}
+
+function getBusinessIdFromPath(pathname: string): string | null {
+  const segments = pathname.split('/').filter(Boolean)
+  if (segments.length >= 2 && UUID_REGEX.test(segments[0]) && segments[1] === 'dashboard') {
+    return segments[0]
+  }
+  return null
+}
+
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
@@ -32,44 +48,90 @@ export async function middleware(request: NextRequest) {
   // Refresh session
   const { data: { user } } = await supabase.auth.getUser()
 
-  // Not logged in → redirect to login
-  if (!user && request.nextUrl.pathname.startsWith('/dashboard')) {
+  const pathname = request.nextUrl.pathname
+  const isDashboard = pathname === '/dashboard' || pathname.startsWith('/dashboard/')
+  const isBusinessDashboard = isBusinessDashboardRoute(pathname)
+
+  // Not logged in → redirect to login for protected routes
+  if (!user && (isDashboard || isBusinessDashboard)) {
     return NextResponse.redirect(new URL('/auth/login', request.url))
   }
 
-  // Not logged in → redirect to login from onboarding/subscribe
   if (!user && (
-    request.nextUrl.pathname.startsWith('/onboarding') ||
-    request.nextUrl.pathname.startsWith('/subscribe')
+    pathname.startsWith('/onboarding') ||
+    pathname.startsWith('/subscribe')
   )) {
     return NextResponse.redirect(new URL('/auth/login', request.url))
   }
 
-  // Already logged in → redirect away from auth pages
-  if (user && request.nextUrl.pathname.startsWith('/auth')) {
+  // Already logged in → redirect away from auth pages to business dashboard
+  if (user && pathname.startsWith('/auth')) {
+    const { data: business } = await supabase
+      .from('businesses')
+      .select('id')
+      .eq('owner_id', user.id)
+      .single()
+
+    if (business) {
+      return NextResponse.redirect(new URL(`/${business.id}/dashboard`, request.url))
+    }
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
-  // Check subscription for dashboard access
-  if (user && request.nextUrl.pathname.startsWith('/dashboard')) {
+  // Old /dashboard route → redirect to /{businessId}/dashboard
+  if (user && isDashboard) {
+    const { data: business } = await supabase
+      .from('businesses')
+      .select('id')
+      .eq('owner_id', user.id)
+      .single()
+
+    if (business) {
+      // Preserve the rest of the path (e.g. /dashboard/subscription → /{id}/dashboard/subscription)
+      const rest = pathname.replace(/^\/dashboard/, '')
+      return NextResponse.redirect(new URL(`/${business.id}/dashboard${rest}`, request.url))
+    }
+    // No business yet — let them through to the old dashboard which will prompt setup
+  }
+
+  // /{businessId}/dashboard — verify ownership + subscription
+  if (user && isBusinessDashboard) {
+    const businessId = getBusinessIdFromPath(pathname)
+
+    // Verify user owns this business
+    const { data: business } = await supabase
+      .from('businesses')
+      .select('id')
+      .eq('id', businessId)
+      .eq('owner_id', user.id)
+      .single()
+
+    if (!business) {
+      // User doesn't own this business — redirect to their own or login
+      const { data: ownBusiness } = await supabase
+        .from('businesses')
+        .select('id')
+        .eq('owner_id', user.id)
+        .single()
+
+      if (ownBusiness) {
+        return NextResponse.redirect(new URL(`/${ownBusiness.id}/dashboard`, request.url))
+      }
+      return NextResponse.redirect(new URL('/auth/login', request.url))
+    }
+
+    // Check subscription
     const { data: sub } = await supabase
       .from('subscriptions')
       .select('status')
       .eq('user_id', user.id)
       .single()
 
-    // No subscription yet → go through onboarding
     if (!sub) {
       return NextResponse.redirect(new URL('/onboarding', request.url))
     }
 
-    // Cancelled subscription → resubscribe page
-    if (sub.status === 'canceled') {
-      return NextResponse.redirect(new URL('/subscribe', request.url))
-    }
-
-    // Payment failed → resubscribe page
-    if (sub.status === 'past_due') {
+    if (sub.status === 'canceled' || sub.status === 'past_due') {
       return NextResponse.redirect(new URL('/subscribe', request.url))
     }
   }
@@ -78,5 +140,12 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/auth/:path*', '/onboarding/:path*', '/subscribe/:path*'],
+  matcher: [
+    '/dashboard/:path*',
+    '/auth/:path*',
+    '/onboarding/:path*',
+    '/subscribe/:path*',
+    '/:businessId/dashboard',
+    '/:businessId/dashboard/:path*',
+  ],
 }

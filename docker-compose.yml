@@ -20,6 +20,7 @@ services:
       - ./volumes/db/roles.sql:/docker-entrypoint-initdb.d/migrations/99-roles.sql:ro
       - ./volumes/db/jwt.sql:/docker-entrypoint-initdb.d/migrations/99-jwt.sql:ro
       - ./volumes/db/subscriptions.sql:/docker-entrypoint-initdb.d/migrations/99-subscriptions.sql:ro
+      - ./volumes/db/phase3-schema.sql:/docker-entrypoint-initdb.d/migrations/99-phase3.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s

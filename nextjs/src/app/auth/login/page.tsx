@@ -26,7 +26,15 @@ export default function LoginPage() {
       return
     }
 
-    router.push('/dashboard')
+    // Look up user's business UUID and redirect to business dashboard
+    const res = await fetch('/api/business/profile')
+    if (res.ok) {
+      const business = await res.json()
+      router.push(`/${business.id}/dashboard`)
+    } else {
+      // No business yet — middleware will handle redirect
+      router.push('/dashboard')
+    }
   }
 
   return (

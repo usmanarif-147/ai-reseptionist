@@ -26,7 +26,20 @@ export default function SignupPage() {
       return
     }
 
-    router.push('/onboarding')
+    // Create a business record for the new user
+    const res = await fetch('/api/business/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'My Business', type: 'general' }),
+    })
+
+    if (res.ok) {
+      const business = await res.json()
+      router.push(`/${business.id}/dashboard`)
+    } else {
+      // Fallback: onboarding will handle it
+      router.push('/onboarding')
+    }
   }
 
   return (

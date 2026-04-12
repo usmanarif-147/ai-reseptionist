@@ -19,8 +19,10 @@ function SuccessContent() {
     async function confirmSubscription() {
       const res = await fetch(`/api/checkout-success?session_id=${sessionId}`)
       if (res.ok) {
+        const data = await res.json()
         setStatus('success')
-        setTimeout(() => router.push('/dashboard'), 2500)
+        const destination = data.businessId ? `/${data.businessId}/dashboard` : '/dashboard'
+        setTimeout(() => router.push(destination), 2500)
       } else {
         setStatus('error')
       }
