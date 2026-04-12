@@ -1,6 +1,7 @@
--- Run this in Supabase Studio (localhost:54323) → SQL Editor
+-- Auto-run on first `docker compose up` (mounted via docker-entrypoint-initdb.d).
+-- Safe to run multiple times (idempotent).
 
-create table public.subscriptions (
+create table if not exists public.subscriptions (
   id uuid default gen_random_uuid() primary key,
   user_id uuid references auth.users(id) on delete cascade not null unique,
   stripe_customer_id text unique not null,
@@ -16,6 +17,9 @@ create table public.subscriptions (
 alter table public.subscriptions enable row level security;
 
 -- Allow users to read their own subscription
-create policy "Users can view own subscription"
-  on public.subscriptions for select
-  using (auth.uid() = user_id);
+do $$ begin
+  create policy "Users can view own subscription"
+    on public.subscriptions for select
+    using (auth.uid() = user_id);
+exception when duplicate_object then null;
+end $$;

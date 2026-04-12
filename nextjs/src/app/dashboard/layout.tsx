@@ -25,6 +25,16 @@ export default async function DashboardLayout({
     redirect('/auth/login')
   }
 
+  const { data: sub } = await supabase
+    .from('subscriptions')
+    .select('status')
+    .eq('user_id', user.id)
+    .single()
+
+  if (sub && ['past_due', 'canceled', 'incomplete'].includes(sub.status)) {
+    redirect('/subscribe')
+  }
+
   async function handleSignOut() {
     'use server'
     const supabase = await createClient()
