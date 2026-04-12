@@ -152,6 +152,13 @@ services:
       # Used by Next.js server inside Docker network
       SUPABASE_INTERNAL_URL: http://kong:8000
       SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+      # Stripe
+      NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      STRIPE_PRICE_ID: ${STRIPE_PRICE_ID}
+      # App URL
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
       # Hot reload fix for Docker on Linux
       WATCHPACK_POLLING: "true"
     volumes:
