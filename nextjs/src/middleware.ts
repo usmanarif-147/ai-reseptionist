@@ -28,13 +28,19 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Refresh session — keeps user logged in
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // Refresh session
+  const { data: { user } } = await supabase.auth.getUser()
 
   // Not logged in → redirect to login
   if (!user && request.nextUrl.pathname.startsWith('/dashboard')) {
+    return NextResponse.redirect(new URL('/auth/login', request.url))
+  }
+
+  // Not logged in → redirect to login from onboarding/subscribe
+  if (!user && (
+    request.nextUrl.pathname.startsWith('/onboarding') ||
+    request.nextUrl.pathname.startsWith('/subscribe')
+  )) {
     return NextResponse.redirect(new URL('/auth/login', request.url))
   }
 
@@ -43,9 +49,33 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
+  // Check subscription for dashboard access
+  if (user && request.nextUrl.pathname.startsWith('/dashboard')) {
+    const { data: sub } = await supabase
+      .from('subscriptions')
+      .select('status')
+      .eq('user_id', user.id)
+      .single()
+
+    // No subscription yet → go through onboarding
+    if (!sub) {
+      return NextResponse.redirect(new URL('/onboarding', request.url))
+    }
+
+    // Cancelled subscription → resubscribe page
+    if (sub.status === 'canceled') {
+      return NextResponse.redirect(new URL('/subscribe', request.url))
+    }
+
+    // Payment failed → resubscribe page
+    if (sub.status === 'past_due') {
+      return NextResponse.redirect(new URL('/subscribe', request.url))
+    }
+  }
+
   return supabaseResponse
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/auth/:path*'],
+  matcher: ['/dashboard/:path*', '/auth/:path*', '/onboarding/:path*', '/subscribe/:path*'],
 }
