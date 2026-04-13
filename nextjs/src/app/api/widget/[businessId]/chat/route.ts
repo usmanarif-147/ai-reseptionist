@@ -117,6 +117,8 @@ export async function POST(
     { data: hours },
     { data: staff },
     { data: customFields },
+    { data: staffCustomFields },
+    { data: staffHours },
     { data: history },
   ] = await Promise.all([
     supabase
@@ -136,13 +138,23 @@ export async function POST(
       .order('day_of_week'),
     supabase
       .from('staff')
-      .select('name, role')
+      .select('id, name, role, bio, is_active, meta')
       .eq('business_id', businessId),
     supabase
       .from('service_custom_fields')
       .select('label, field_key')
       .eq('business_id', businessId)
       .order('sort_order'),
+    supabase
+      .from('staff_custom_fields')
+      .select('label, field_key')
+      .eq('business_id', businessId)
+      .order('sort_order'),
+    supabase
+      .from('staff_hours')
+      .select('staff_id, day_of_week, open_time, close_time, is_closed')
+      .eq('business_id', businessId)
+      .order('day_of_week'),
     supabase
       .from('chat_messages')
       .select('role, content')
@@ -155,7 +167,9 @@ export async function POST(
     services ?? [],
     hours ?? [],
     staff ?? [],
-    customFields ?? []
+    customFields ?? [],
+    staffCustomFields ?? [],
+    staffHours ?? []
   )
 
   // Persist user message

@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { name, role, photo_url } = body
+  const { name, role, photo_url, bio, contact, is_active, meta } = body
 
   if (!name || !role) {
     return NextResponse.json(
@@ -49,6 +49,10 @@ export async function POST(request: NextRequest) {
       name,
       role,
       photo_url: photo_url || null,
+      bio: bio || null,
+      contact: contact ?? {},
+      is_active: is_active ?? true,
+      meta: meta ?? {},
     })
     .select()
     .single()
@@ -70,7 +74,7 @@ export async function PUT(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { id, name, role, photo_url } = body
+  const { id, name, role, photo_url, bio, contact, is_active, meta } = body
 
   if (!id) {
     return NextResponse.json({ error: 'Staff id is required' }, { status: 400 })
@@ -89,6 +93,10 @@ export async function PUT(request: NextRequest) {
       name,
       role,
       photo_url: photo_url || null,
+      bio: bio ?? null,
+      contact: contact ?? {},
+      is_active: is_active ?? true,
+      meta: meta ?? {},
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)
