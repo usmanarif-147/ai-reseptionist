@@ -1,6 +1,7 @@
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
 interface Service {
+  id?: string
   name: string
   description: string | null
   price: number | null
@@ -39,6 +40,31 @@ interface StaffHour {
   is_closed: boolean
 }
 
+export interface VisibilitySettings {
+  show_business_name: boolean
+  show_contact: boolean
+  show_address: boolean
+  show_business_type: boolean
+  show_business_hours: boolean
+  services_visibility: 'active_only' | 'all' | 'hide_specific'
+  hidden_service_ids: string[]
+  staff_visibility: 'active_only' | 'all' | 'hide_specific'
+  hidden_staff_ids: string[]
+  show_appointment_service: boolean
+  show_appointment_staff: boolean
+  show_appointment_datetime: boolean
+  show_appointment_duration: boolean
+  show_appointment_payment_type: boolean
+  show_appointment_payment_status: boolean
+  show_appointment_notes: boolean
+}
+
+interface BusinessInfo {
+  contact?: string | null
+  address?: string | null
+  type?: string | null
+}
+
 export function buildSystemPrompt(
   businessName: string,
   services: Service[],
@@ -46,19 +72,65 @@ export function buildSystemPrompt(
   staff: StaffMember[],
   customFields: CustomField[] = [],
   staffCustomFields: CustomField[] = [],
-  staffHours: StaffHour[] = []
+  staffHours: StaffHour[] = [],
+  visibilitySettings?: VisibilitySettings,
+  businessInfo?: BusinessInfo
 ): string {
+  const vs = visibilitySettings
+
+  const displayName = vs && !vs.show_business_name ? 'this business' : businessName
+
   const lines: string[] = [
-    `You are a virtual receptionist for ${businessName}.`,
+    `You are a virtual receptionist for ${displayName}.`,
     'Only answer questions using the information provided below.',
     'If you cannot answer a question from the information provided, say: "I don\'t have that information — please contact us directly."',
     'Be friendly, concise, and helpful.',
     '',
   ]
 
-  const activeServices = services.filter((s) => s.is_active !== false)
+  // Business info section
+  if (businessInfo) {
+    const infoLines: string[] = []
+    if ((!vs || vs.show_business_type) && businessInfo.type) {
+      infoLines.push(`Business type: ${businessInfo.type}`)
+    }
+    if ((!vs || vs.show_contact) && businessInfo.contact) {
+      infoLines.push(`Contact: ${businessInfo.contact}`)
+    }
+    if ((!vs || vs.show_address) && businessInfo.address) {
+      infoLines.push(`Address: ${businessInfo.address}`)
+    }
+    if (infoLines.length > 0) {
+      lines.push('BUSINESS INFO:')
+      for (const line of infoLines) {
+        lines.push(`- ${line}`)
+      }
+      lines.push('')
+    }
+  }
 
-  if (activeServices.length > 0) {
+  // Filter services based on visibility settings
+  let filteredServices: Service[]
+  if (vs) {
+    switch (vs.services_visibility) {
+      case 'all':
+        filteredServices = services
+        break
+      case 'hide_specific': {
+        const hiddenIds = new Set(vs.hidden_service_ids)
+        filteredServices = services.filter((s) => !s.id || !hiddenIds.has(s.id))
+        break
+      }
+      case 'active_only':
+      default:
+        filteredServices = services.filter((s) => s.is_active !== false)
+        break
+    }
+  } else {
+    filteredServices = services.filter((s) => s.is_active !== false)
+  }
+
+  if (filteredServices.length > 0) {
     lines.push('SERVICES:')
 
     const fieldLabelMap = new Map<string, string>()
@@ -66,7 +138,7 @@ export function buildSystemPrompt(
       fieldLabelMap.set(cf.field_key, cf.label)
     }
 
-    for (const s of activeServices) {
+    for (const s of filteredServices) {
       const parts = [s.name]
       if (s.description) parts.push(s.description)
       if (s.price != null) parts.push(`$${Number(s.price).toFixed(2)}`)
@@ -84,7 +156,8 @@ export function buildSystemPrompt(
     lines.push('')
   }
 
-  if (hours.length > 0) {
+  // Business hours (conditionally included)
+  if ((!vs || vs.show_business_hours) && hours.length > 0) {
     lines.push('BUSINESS HOURS:')
     for (const h of hours) {
       const day = DAY_NAMES[h.day_of_week] ?? `Day ${h.day_of_week}`
@@ -97,8 +170,27 @@ export function buildSystemPrompt(
     lines.push('')
   }
 
+  // Filter staff based on visibility settings
   if (staff.length > 0) {
-    const activeStaff = staff.filter((s) => s.is_active !== false)
+    let filteredStaff: StaffMember[]
+    if (vs) {
+      switch (vs.staff_visibility) {
+        case 'all':
+          filteredStaff = staff
+          break
+        case 'hide_specific': {
+          const hiddenIds = new Set(vs.hidden_staff_ids)
+          filteredStaff = staff.filter((s) => !s.id || !hiddenIds.has(s.id))
+          break
+        }
+        case 'active_only':
+        default:
+          filteredStaff = staff.filter((s) => s.is_active !== false)
+          break
+      }
+    } else {
+      filteredStaff = staff.filter((s) => s.is_active !== false)
+    }
 
     const staffFieldLabelMap = new Map<string, string>()
     for (const cf of staffCustomFields) {
@@ -112,9 +204,9 @@ export function buildSystemPrompt(
       staffHoursByStaffId.set(sh.staff_id, existing)
     }
 
-    if (activeStaff.length > 0) {
+    if (filteredStaff.length > 0) {
       lines.push('STAFF:')
-      for (const member of activeStaff) {
+      for (const member of filteredStaff) {
         const role = member.role ? ` (${member.role})` : ''
         lines.push(`- ${member.name}${role}`)
 
@@ -150,6 +242,33 @@ export function buildSystemPrompt(
       lines.push('')
     }
   }
+
+  // Appointment lookup fields (visible fields only)
+  if (vs) {
+    const appointmentFields: string[] = []
+    if (vs.show_appointment_service) appointmentFields.push('Service name')
+    if (vs.show_appointment_staff) appointmentFields.push('Staff member')
+    if (vs.show_appointment_datetime) appointmentFields.push('Date and time')
+    if (vs.show_appointment_duration) appointmentFields.push('Duration')
+    if (vs.show_appointment_payment_type) appointmentFields.push('Payment type')
+    if (vs.show_appointment_payment_status) appointmentFields.push('Payment status')
+    if (vs.show_appointment_notes) appointmentFields.push('Notes')
+
+    if (appointmentFields.length > 0) {
+      lines.push('APPOINTMENT LOOKUP — visible fields to share with customer:')
+      for (const field of appointmentFields) {
+        lines.push(`- ${field}`)
+      }
+      lines.push('')
+    }
+  }
+
+  // Non-configurable rules — always appended
+  lines.push('IMPORTANT RULES (always enforce, non-negotiable):')
+  lines.push('- Refund requests: Never handle them. Always redirect customer to contact the business directly.')
+  lines.push('- Appointment booking: Never collect booking details in chat. Share the booking link only and direct the customer to book there.')
+  lines.push('- Appointment lookup: Customers must provide their 8-digit appointment number for you to look up their appointment.')
+  lines.push('')
 
   return lines.join('\n')
 }

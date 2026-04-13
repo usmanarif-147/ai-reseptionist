@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { createGeminiClient } from '@/lib/gemini'
-import { buildSystemPrompt } from '@/lib/build-system-prompt'
+import { buildSystemPrompt, VisibilitySettings } from '@/lib/build-system-prompt'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -110,7 +110,7 @@ export async function POST(
     sessionId = newSession.id
   }
 
-  // Fetch business data and conversation history in parallel
+  // Fetch business data, widget settings, and conversation history in parallel
   const [
     { data: businessData },
     { data: services },
@@ -119,18 +119,18 @@ export async function POST(
     { data: customFields },
     { data: staffCustomFields },
     { data: staffHours },
+    { data: widgetSettings },
     { data: history },
   ] = await Promise.all([
     supabase
       .from('businesses')
-      .select('name')
+      .select('name, type, contact, address')
       .eq('id', businessId)
       .single(),
     supabase
       .from('services')
-      .select('name, description, price, duration_minutes, category, is_active, meta')
-      .eq('business_id', businessId)
-      .eq('is_active', true),
+      .select('id, name, description, price, duration_minutes, category, is_active, meta')
+      .eq('business_id', businessId),
     supabase
       .from('business_hours')
       .select('day_of_week, open_time, close_time, is_closed')
@@ -156,11 +156,36 @@ export async function POST(
       .eq('business_id', businessId)
       .order('day_of_week'),
     supabase
+      .from('widget_settings')
+      .select('show_business_name, show_contact, show_address, show_business_type, show_business_hours, services_visibility, hidden_service_ids, staff_visibility, hidden_staff_ids, show_appointment_service, show_appointment_staff, show_appointment_datetime, show_appointment_duration, show_appointment_payment_type, show_appointment_payment_status, show_appointment_notes')
+      .eq('business_id', businessId)
+      .single(),
+    supabase
       .from('chat_messages')
       .select('role, content')
       .eq('session_id', sessionId)
       .order('created_at'),
   ])
+
+  // Build visibility settings with DB defaults as fallback
+  const visibilitySettings: VisibilitySettings = {
+    show_business_name: widgetSettings?.show_business_name ?? true,
+    show_contact: widgetSettings?.show_contact ?? true,
+    show_address: widgetSettings?.show_address ?? true,
+    show_business_type: widgetSettings?.show_business_type ?? true,
+    show_business_hours: widgetSettings?.show_business_hours ?? true,
+    services_visibility: widgetSettings?.services_visibility ?? 'active_only',
+    hidden_service_ids: widgetSettings?.hidden_service_ids ?? [],
+    staff_visibility: widgetSettings?.staff_visibility ?? 'active_only',
+    hidden_staff_ids: widgetSettings?.hidden_staff_ids ?? [],
+    show_appointment_service: widgetSettings?.show_appointment_service ?? true,
+    show_appointment_staff: widgetSettings?.show_appointment_staff ?? true,
+    show_appointment_datetime: widgetSettings?.show_appointment_datetime ?? true,
+    show_appointment_duration: widgetSettings?.show_appointment_duration ?? true,
+    show_appointment_payment_type: widgetSettings?.show_appointment_payment_type ?? false,
+    show_appointment_payment_status: widgetSettings?.show_appointment_payment_status ?? false,
+    show_appointment_notes: widgetSettings?.show_appointment_notes ?? true,
+  }
 
   const systemPrompt = buildSystemPrompt(
     businessData?.name ?? 'this business',
@@ -169,7 +194,13 @@ export async function POST(
     staff ?? [],
     customFields ?? [],
     staffCustomFields ?? [],
-    staffHours ?? []
+    staffHours ?? [],
+    visibilitySettings,
+    {
+      contact: businessData?.contact,
+      address: businessData?.address,
+      type: businessData?.type,
+    }
   )
 
   // Persist user message
