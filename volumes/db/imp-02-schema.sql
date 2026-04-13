@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS staff_custom_fields (
 
 ALTER TABLE staff_custom_fields ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "owner_access" ON staff_custom_fields;
 CREATE POLICY "owner_access" ON staff_custom_fields
   FOR ALL USING (
     business_id IN (
@@ -48,6 +49,7 @@ CREATE TABLE IF NOT EXISTS staff_hours (
 
 ALTER TABLE staff_hours ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "owner_access" ON staff_hours;
 CREATE POLICY "owner_access" ON staff_hours
   FOR ALL USING (
     business_id IN (
