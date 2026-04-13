@@ -5,6 +5,9 @@ interface Service {
   description: string | null
   price: number | null
   duration_minutes: number | null
+  category: string | null
+  is_active: boolean
+  meta: Record<string, unknown>
 }
 
 interface BusinessHour {
@@ -19,11 +22,17 @@ interface StaffMember {
   role: string | null
 }
 
+interface CustomField {
+  label: string
+  field_key: string
+}
+
 export function buildSystemPrompt(
   businessName: string,
   services: Service[],
   hours: BusinessHour[],
-  staff: StaffMember[]
+  staff: StaffMember[],
+  customFields: CustomField[] = []
 ): string {
   const lines: string[] = [
     `You are a virtual receptionist for ${businessName}.`,
@@ -33,14 +42,30 @@ export function buildSystemPrompt(
     '',
   ]
 
-  if (services.length > 0) {
+  const activeServices = services.filter((s) => s.is_active !== false)
+
+  if (activeServices.length > 0) {
     lines.push('SERVICES:')
-    for (const s of services) {
+
+    const fieldLabelMap = new Map<string, string>()
+    for (const cf of customFields) {
+      fieldLabelMap.set(cf.field_key, cf.label)
+    }
+
+    for (const s of activeServices) {
       const parts = [s.name]
       if (s.description) parts.push(s.description)
       if (s.price != null) parts.push(`$${Number(s.price).toFixed(2)}`)
       if (s.duration_minutes != null) parts.push(`${s.duration_minutes} min`)
       lines.push(`- ${parts.join(' — ')}`)
+
+      if (s.meta && typeof s.meta === 'object') {
+        for (const [key, value] of Object.entries(s.meta)) {
+          const label = fieldLabelMap.get(key)
+          if (!label) continue
+          lines.push(`    • ${label}: ${value}`)
+        }
+      }
     }
     lines.push('')
   }
