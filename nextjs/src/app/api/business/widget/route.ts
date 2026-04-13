@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticateAndGetBusiness } from '@/lib/auth'
+import { DEFAULT_VISIBILITY_SETTINGS } from '@/lib/build-system-prompt'
 
 export async function GET() {
   const auth = await authenticateAndGetBusiness()
@@ -59,22 +60,22 @@ export async function PUT(request: NextRequest) {
     .update({
       color: color || '#2563eb',
       welcome_message: welcome_message || 'How can we help you today?',
-      show_business_name: show_business_name ?? true,
-      show_contact: show_contact ?? true,
-      show_address: show_address ?? true,
-      show_business_type: show_business_type ?? true,
-      show_business_hours: show_business_hours ?? true,
-      services_visibility: services_visibility ?? 'active_only',
-      hidden_service_ids: hidden_service_ids ?? [],
-      staff_visibility: staff_visibility ?? 'active_only',
-      hidden_staff_ids: hidden_staff_ids ?? [],
-      show_appointment_service: show_appointment_service ?? true,
-      show_appointment_staff: show_appointment_staff ?? true,
-      show_appointment_datetime: show_appointment_datetime ?? true,
-      show_appointment_duration: show_appointment_duration ?? true,
-      show_appointment_payment_type: show_appointment_payment_type ?? false,
-      show_appointment_payment_status: show_appointment_payment_status ?? false,
-      show_appointment_notes: show_appointment_notes ?? true,
+      show_business_name: show_business_name ?? DEFAULT_VISIBILITY_SETTINGS.show_business_name,
+      show_contact: show_contact ?? DEFAULT_VISIBILITY_SETTINGS.show_contact,
+      show_address: show_address ?? DEFAULT_VISIBILITY_SETTINGS.show_address,
+      show_business_type: show_business_type ?? DEFAULT_VISIBILITY_SETTINGS.show_business_type,
+      show_business_hours: show_business_hours ?? DEFAULT_VISIBILITY_SETTINGS.show_business_hours,
+      services_visibility: services_visibility ?? DEFAULT_VISIBILITY_SETTINGS.services_visibility,
+      hidden_service_ids: hidden_service_ids ?? DEFAULT_VISIBILITY_SETTINGS.hidden_service_ids,
+      staff_visibility: staff_visibility ?? DEFAULT_VISIBILITY_SETTINGS.staff_visibility,
+      hidden_staff_ids: hidden_staff_ids ?? DEFAULT_VISIBILITY_SETTINGS.hidden_staff_ids,
+      show_appointment_service: show_appointment_service ?? DEFAULT_VISIBILITY_SETTINGS.show_appointment_service,
+      show_appointment_staff: show_appointment_staff ?? DEFAULT_VISIBILITY_SETTINGS.show_appointment_staff,
+      show_appointment_datetime: show_appointment_datetime ?? DEFAULT_VISIBILITY_SETTINGS.show_appointment_datetime,
+      show_appointment_duration: show_appointment_duration ?? DEFAULT_VISIBILITY_SETTINGS.show_appointment_duration,
+      show_appointment_payment_type: show_appointment_payment_type ?? DEFAULT_VISIBILITY_SETTINGS.show_appointment_payment_type,
+      show_appointment_payment_status: show_appointment_payment_status ?? DEFAULT_VISIBILITY_SETTINGS.show_appointment_payment_status,
+      show_appointment_notes: show_appointment_notes ?? DEFAULT_VISIBILITY_SETTINGS.show_appointment_notes,
       updated_at: new Date().toISOString(),
     })
     .eq('business_id', business.id)

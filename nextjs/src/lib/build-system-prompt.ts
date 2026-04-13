@@ -59,6 +59,27 @@ export interface VisibilitySettings {
   show_appointment_notes: boolean
 }
 
+// Single source of truth for all widget visibility defaults.
+// Import this constant wherever fallback values are needed — never hardcode defaults elsewhere.
+export const DEFAULT_VISIBILITY_SETTINGS: VisibilitySettings = {
+  show_business_name: false,
+  show_contact: false,
+  show_address: false,
+  show_business_type: false,
+  show_business_hours: false,
+  services_visibility: 'active_only',
+  hidden_service_ids: [],
+  staff_visibility: 'active_only',
+  hidden_staff_ids: [],
+  show_appointment_service: false,
+  show_appointment_staff: false,
+  show_appointment_datetime: false,
+  show_appointment_duration: false,
+  show_appointment_payment_type: false,
+  show_appointment_payment_status: false,
+  show_appointment_notes: false,
+}
+
 interface BusinessInfo {
   contact?: string | null
   address?: string | null
@@ -91,13 +112,13 @@ export function buildSystemPrompt(
   // Business info section
   if (businessInfo) {
     const infoLines: string[] = []
-    if ((!vs || vs.show_business_type) && businessInfo.type) {
+    if (vs?.show_business_type && businessInfo.type) {
       infoLines.push(`Business type: ${businessInfo.type}`)
     }
-    if ((!vs || vs.show_contact) && businessInfo.contact) {
+    if (vs?.show_contact && businessInfo.contact) {
       infoLines.push(`Contact: ${businessInfo.contact}`)
     }
-    if ((!vs || vs.show_address) && businessInfo.address) {
+    if (vs?.show_address && businessInfo.address) {
       infoLines.push(`Address: ${businessInfo.address}`)
     }
     if (infoLines.length > 0) {
@@ -157,7 +178,7 @@ export function buildSystemPrompt(
   }
 
   // Business hours (conditionally included)
-  if ((!vs || vs.show_business_hours) && hours.length > 0) {
+  if (vs?.show_business_hours && hours.length > 0) {
     lines.push('BUSINESS HOURS:')
     for (const h of hours) {
       const day = DAY_NAMES[h.day_of_week] ?? `Day ${h.day_of_week}`
