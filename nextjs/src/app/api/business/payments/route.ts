@@ -40,14 +40,14 @@ export async function PUT(request: NextRequest) {
   const body = await request.json()
   const { payment_type, stripe_publishable_key, stripe_secret_key } = body
 
-  if (!payment_type || !['cash', 'online'].includes(payment_type)) {
+  if (!payment_type || !['cash', 'online', 'both'].includes(payment_type)) {
     return NextResponse.json(
-      { error: 'payment_type must be "cash" or "online"' },
+      { error: 'payment_type must be "cash", "online", or "both"' },
       { status: 400 }
     )
   }
 
-  if (payment_type === 'online') {
+  if (payment_type === 'online' || payment_type === 'both') {
     if (!stripe_publishable_key || !stripe_secret_key) {
       return NextResponse.json(
         { error: 'Stripe keys are required for online payments' },
@@ -61,7 +61,7 @@ export async function PUT(request: NextRequest) {
     updated_at: new Date().toISOString(),
   }
 
-  if (payment_type === 'online') {
+  if (payment_type === 'online' || payment_type === 'both') {
     updateData.stripe_publishable_key = stripe_publishable_key
     updateData.stripe_secret_key = stripe_secret_key
   } else {

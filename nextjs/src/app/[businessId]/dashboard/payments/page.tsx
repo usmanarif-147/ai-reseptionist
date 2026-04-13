@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 
-type PaymentType = 'cash' | 'online'
+type PaymentType = 'cash' | 'online' | 'both'
 
 export default function PaymentsPage() {
   const { businessId } = useParams<{ businessId: string }>()
@@ -36,8 +36,8 @@ export default function PaymentsPage() {
     setError('')
     setSuccess('')
 
-    if (paymentType === 'online' && (!stripePublishableKey.trim() || !stripeSecretKey.trim())) {
-      setError('Both Stripe keys are required for online payments')
+    if ((paymentType === 'online' || paymentType === 'both') && (!stripePublishableKey.trim() || !stripeSecretKey.trim())) {
+      setError('Both Stripe keys are required when online payments are enabled')
       return
     }
 
@@ -45,8 +45,8 @@ export default function PaymentsPage() {
 
     const body: Record<string, string | null> = {
       payment_type: paymentType,
-      stripe_publishable_key: paymentType === 'online' ? stripePublishableKey : null,
-      stripe_secret_key: paymentType === 'online' ? stripeSecretKey : null,
+      stripe_publishable_key: (paymentType === 'online' || paymentType === 'both') ? stripePublishableKey : null,
+      stripe_secret_key: (paymentType === 'online' || paymentType === 'both') ? stripeSecretKey : null,
     }
 
     const res = await fetch('/api/business/payments', {
@@ -86,7 +86,7 @@ export default function PaymentsPage() {
 
       <form onSubmit={handleSave}>
         {/* Payment type toggle */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-3xl mb-6">
           <button
             type="button"
             onClick={() => setPaymentType('cash')}
@@ -130,10 +130,32 @@ export default function PaymentsPage() {
               Customers pay via Stripe when they book. Money goes directly to your Stripe account.
             </p>
           </button>
+
+          <button
+            type="button"
+            onClick={() => setPaymentType('both')}
+            className={`p-5 rounded-xl border-2 text-left transition-colors ${
+              paymentType === 'both'
+                ? 'border-blue-600 bg-blue-50'
+                : 'border-gray-100 bg-white hover:border-gray-200'
+            }`}
+          >
+            <div className="flex items-center gap-3 mb-2">
+              <svg className={`w-6 h-6 ${paymentType === 'both' ? 'text-blue-600' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+              </svg>
+              <span className={`font-semibold text-sm ${paymentType === 'both' ? 'text-blue-900' : 'text-gray-900'}`}>
+                Both (Customer&#39;s Choice)
+              </span>
+            </div>
+            <p className={`text-xs ${paymentType === 'both' ? 'text-blue-700' : 'text-gray-500'}`}>
+              Let customers choose to pay online or in person at their appointment.
+            </p>
+          </button>
         </div>
 
         {/* Stripe keys */}
-        {paymentType === 'online' && (
+        {(paymentType === 'online' || paymentType === 'both') && (
           <div className="bg-white rounded-xl border border-gray-100 p-6 max-w-2xl mb-6 space-y-4">
             <div>
               <h3 className="text-base font-semibold text-gray-900 mb-1">Stripe API Keys</h3>
@@ -185,7 +207,8 @@ function LoadingSkeleton() {
     <div className="animate-pulse">
       <div className="h-8 bg-gray-200 rounded w-44 mb-2" />
       <div className="h-4 bg-gray-200 rounded w-64 mb-8" />
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-3xl">
+        <div className="bg-white rounded-xl border border-gray-100 p-5 h-28" />
         <div className="bg-white rounded-xl border border-gray-100 p-5 h-28" />
         <div className="bg-white rounded-xl border border-gray-100 p-5 h-28" />
       </div>
