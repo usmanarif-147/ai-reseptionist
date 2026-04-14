@@ -130,8 +130,7 @@ export default function WidgetPage() {
     setLoading(false)
   }
 
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault()
+  async function saveSettings() {
     setError('')
     setSuccess('')
     setSaving(true)
@@ -164,12 +163,15 @@ export default function WidgetPage() {
     if (!res.ok) {
       const data = await res.json()
       setError(data.error || 'Failed to save widget settings')
-      setSaving(false)
-      return
+    } else {
+      setSuccess('Widget settings saved successfully')
     }
-
-    setSuccess('Widget settings saved successfully')
     setSaving(false)
+  }
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault()
+    await saveSettings()
   }
 
   const embedCode = `<script src="${typeof window !== 'undefined' ? window.location.origin : ''}/widget.js" data-business-id="${businessId}"></script>`
@@ -399,7 +401,7 @@ export default function WidgetPage() {
           </div>
 
           {/* Appointments */}
-          <div className="flex items-center justify-between py-3.5 last:pb-0">
+          <div className="flex items-center justify-between py-3.5">
             <div className="flex items-center gap-3">
               <span className="text-sm font-medium text-gray-900">Appointments</span>
               <span className="text-xs text-gray-400">{appointmentCount} of 7 fields visible</span>
@@ -414,6 +416,17 @@ export default function WidgetPage() {
               </svg>
             </button>
           </div>
+        </div>
+
+        <div className="mt-5 pt-5 border-t border-gray-100">
+          <button
+            type="button"
+            onClick={saveSettings}
+            disabled={saving}
+            className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+          >
+            {saving ? 'Saving...' : 'Save Changes'}
+          </button>
         </div>
       </div>
 
