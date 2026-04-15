@@ -34,7 +34,7 @@ export async function GET(
 
   const { data: settings, error } = await supabase
     .from('widget_settings')
-    .select('color, welcome_message')
+    .select('*')
     .eq('business_id', businessId)
     .single()
 
@@ -45,7 +45,16 @@ export async function GET(
     )
   }
 
-  return NextResponse.json(settings, {
+  // Explicitly shape the public response — never expose all columns directly.
+  // Defaults for new columns guard against pre-migration state.
+  const response = {
+    color: settings.color,
+    welcome_message: settings.welcome_message,
+    tooltip_enabled: settings.tooltip_enabled ?? true,
+    tooltip_text: settings.tooltip_text ?? 'Ask us anything \u2014 we reply instantly 24/7',
+  }
+
+  return NextResponse.json(response, {
     headers: {
       ...CORS_HEADERS,
       'Cache-Control': 'public, max-age=60',

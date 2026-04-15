@@ -95,7 +95,8 @@ export function buildSystemPrompt(
   staffCustomFields: CustomField[] = [],
   staffHours: StaffHour[] = [],
   visibilitySettings?: VisibilitySettings,
-  businessInfo?: BusinessInfo
+  businessInfo?: BusinessInfo,
+  intent?: string
 ): string {
   const vs = visibilitySettings
 
@@ -108,6 +109,23 @@ export function buildSystemPrompt(
     'Be friendly, concise, and helpful.',
     '',
   ]
+
+  // Intent-specific instruction
+  if (intent) {
+    lines.push('CUSTOMER INTENT:')
+    if (intent === 'basic_information') {
+      lines.push('The customer wants general information. Answer questions about services, hours, staff, and pricing.')
+      lines.push('Do not bring up appointment booking unless the customer asks.')
+    } else if (intent === 'book_appointment') {
+      lines.push('The customer wants to book an appointment. Guide them toward booking.')
+      lines.push('Share the booking link early in the conversation and encourage them to book there.')
+    } else if (intent === 'appointment_details') {
+      lines.push('The customer wants to check an existing appointment. They provided their appointment number.')
+      lines.push('Look up and share the appointment details using the visible fields listed below.')
+      lines.push('If appointment number was not provided, ask for it before proceeding.')
+    }
+    lines.push('')
+  }
 
   // Business info section
   if (businessInfo) {

@@ -9,7 +9,10 @@
   var primaryColor = '#2563eb';
   var sessionId = sessionStorage.getItem('ai-widget-session-' + businessId) || null;
   var intentKey = 'ai-widget-intent-' + businessId;
-  var currentIntent = localStorage.getItem(intentKey) || null;
+  var lastIntentKey = 'ai-widget-last-intent-' + businessId;
+  var tooltipDismissedKey = 'ai-widget-tooltip-dismissed-' + businessId;
+  var lastMsgTimeKey = 'ai-widget-last-msg-' + businessId;
+  var currentIntent = null; // never pre-loaded — only set after intent selection
 
   // --- Visitor ID ---
   var visitorKey = 'ai-widget-visitor-' + businessId;
@@ -33,9 +36,22 @@
     '#ai-widget-root { position: fixed; bottom: 20px; right: 20px; z-index: 2147483647; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }',
     '#ai-widget-root * { box-sizing: border-box; margin: 0; padding: 0; }',
     // Launcher button
-    '#ai-widget-btn { display: none; align-items: center; justify-content: center; width: 54px; height: 54px; border-radius: 50%; background: var(--ai-widget-primary, #2563eb); color: #fff; border: none; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,0.2); transition: transform 0.15s ease, box-shadow 0.15s ease; }',
-    '#ai-widget-btn:hover { transform: scale(1.07); box-shadow: 0 6px 20px rgba(0,0,0,0.25); }',
+    '#ai-widget-btn { display: none; align-items: center; justify-content: center; width: 54px; height: 54px; border-radius: 50%; background: var(--ai-widget-primary, #2563eb); color: #fff; border: none; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,0.2); transition: transform 0.15s ease, box-shadow 0.15s ease; position: relative; }',
+    '#ai-widget-btn:hover { transform: scale(1.07); box-shadow: 0 6px 20px rgba(0,0,0,0.25); animation-play-state: paused; }',
     '#ai-widget-btn svg { width: 22px; height: 22px; fill: #fff; }',
+    // Pulse animation — ::before pseudo-element creates expanding ring
+    '@keyframes ai-widget-pulse { 0% { transform: scale(1); opacity: 0.7; } 100% { transform: scale(1.9); opacity: 0; } }',
+    '#ai-widget-btn::before { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--ai-widget-primary, #2563eb); animation: ai-widget-pulse 1.1s ease-out 3; pointer-events: none; z-index: -1; }',
+    // Zoom animation — gentle scale after pulse ends (3 × 1.1s = 3.3s delay)
+    '@keyframes ai-widget-zoom { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }',
+    '#ai-widget-btn { animation: ai-widget-zoom 3.5s ease-in-out 3.3s infinite; }',
+    // Tooltip
+    '@keyframes ai-widget-tooltip-in { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: translateX(0); } }',
+    '#ai-widget-tooltip { position: fixed; bottom: 28px; right: 84px; background: #fff; border-radius: 10px; padding: 10px 13px; box-shadow: 0 4px 16px rgba(0,0,0,0.14); font-size: 13px; color: #1f2937; max-width: 220px; line-height: 1.4; display: flex; align-items: flex-start; gap: 10px; animation: ai-widget-tooltip-in 0.3s ease 3s both; }',
+    '#ai-widget-tooltip::after { content: ""; position: absolute; right: -7px; top: 50%; transform: translateY(-50%); border: 7px solid transparent; border-right: none; border-left-color: #fff; }',
+    '#ai-widget-tooltip-text { flex: 1; }',
+    '#ai-widget-tooltip-close { background: none; border: none; cursor: pointer; color: #9ca3af; font-size: 16px; padding: 0; flex-shrink: 0; line-height: 1; }',
+    '#ai-widget-tooltip-close:hover { color: #374151; }',
     // Popup shell
     '#ai-widget-popup { position: fixed; bottom: 84px; right: 20px; width: 348px; max-width: calc(100vw - 40px); height: 520px; max-height: calc(100vh - 110px); background: #fff; border-radius: 16px; box-shadow: 0 12px 40px rgba(0,0,0,0.16); display: flex; flex-direction: column; overflow: hidden; }',
     // Header
@@ -70,6 +86,7 @@
     '.ai-widget-intent-sublabel { font-size: 12px; color: #9ca3af; margin-top: 4px; display: block; }',
     '.ai-widget-intent-btn { display: flex; align-items: center; gap: 14px; width: 100%; padding: 15px 16px; border: none; border-radius: 14px; color: #fff; font-family: inherit; cursor: pointer; transition: transform 0.12s, box-shadow 0.12s; text-align: left; }',
     '.ai-widget-intent-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,0,0,0.15); }',
+    '.ai-widget-intent-btn.selected { outline: 3px solid rgba(255,255,255,0.7); outline-offset: 2px; }',
     '.ai-widget-intent-icon-wrap { width: 40px; height: 40px; border-radius: 10px; background: rgba(255,255,255,0.22); display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }',
     '.ai-widget-intent-text { flex: 1; }',
     '.ai-widget-intent-name { display: block; font-size: 14px; font-weight: 700; }',
@@ -169,14 +186,23 @@
     document.getElementById('ai-widget-input-row').style.display = 'none';
   }
 
+  // --- 10-minute resume check ---
+  function canResumeSession() {
+    var lastMsgTime = sessionStorage.getItem(lastMsgTimeKey);
+    return sessionId && lastMsgTime && (Date.now() - parseInt(lastMsgTime)) < 10 * 60 * 1000;
+  }
+
   // --- Intent Selection ---
-  function showIntentSelection() {
+  // isReturning: true for returning customers (form is skipped, goes straight to chat)
+  function showIntentSelection(isReturning) {
     hideChatUI();
     // Remove any existing intent/form screens
     var existing = document.getElementById('ai-widget-intent');
     if (existing) existing.remove();
     existing = document.getElementById('ai-widget-prechat');
     if (existing) existing.remove();
+
+    var lastIntent = localStorage.getItem(lastIntentKey);
 
     var wrap = document.createElement('div');
     wrap.id = 'ai-widget-intent';
@@ -205,12 +231,24 @@
     ].join('');
     bodyEl.insertBefore(wrap, messagesEl);
 
+    // Pre-select last used intent for returning customers
+    if (lastIntent) {
+      var lastBtn = wrap.querySelector('[data-intent="' + lastIntent + '"]');
+      if (lastBtn) lastBtn.classList.add('selected');
+    }
+
     var buttons = wrap.querySelectorAll('.ai-widget-intent-btn');
     buttons.forEach(function(b) {
       b.addEventListener('click', function() {
         currentIntent = b.getAttribute('data-intent');
-        localStorage.setItem(intentKey, currentIntent);
-        showPreChatForm();
+        if (isReturning) {
+          // Returning customer — save intent and go straight to chat (form already on file)
+          localStorage.setItem(lastIntentKey, currentIntent);
+          openChat();
+        } else {
+          // New visitor — show pre-chat form (intent saved only after form submit)
+          showPreChatForm();
+        }
       });
     });
   }
@@ -263,10 +301,9 @@
     var backBtn = document.getElementById('ai-pcf-back');
     backBtn.addEventListener('click', function() {
       currentIntent = null;
-      localStorage.removeItem(intentKey);
       var prechatEl = document.getElementById('ai-widget-prechat');
       if (prechatEl) prechatEl.remove();
-      showIntentSelection();
+      showIntentSelection(false);
     });
 
     var submitBtn = document.getElementById('ai-pcf-submit');
@@ -330,7 +367,9 @@
     })
       .then(function(r) { return r.ok ? r.json() : Promise.reject(r.status); })
       .then(function(data) {
+        // Save email and last used intent only after successful form submit
         localStorage.setItem(emailKey, email);
+        localStorage.setItem(lastIntentKey, currentIntent);
         sessionStorage.setItem('ai-widget-customer-id-' + businessId, data.customer_id);
         openChat();
       })
@@ -349,25 +388,52 @@
     var prechatEl = document.getElementById('ai-widget-prechat');
     if (prechatEl) prechatEl.remove();
     showChatUI();
+    // Show welcome message if not already shown
+    if (!welcomeShown) {
+      addMessage('bot', welcomeMessage);
+      welcomeShown = true;
+    }
+    // Dismiss tooltip when chat opens
+    var tipEl = document.getElementById('ai-widget-tooltip');
+    if (tipEl) {
+      sessionStorage.setItem(tooltipDismissedKey, '1');
+      tipEl.remove();
+    }
   }
 
   // --- Config fetch ---
   var welcomeMessage = 'How can we help you today?';
+  var welcomeShown = false;
   fetch(API_BASE + '/api/widget/' + businessId + '/config')
     .then(function(r) { return r.ok ? r.json() : Promise.reject(r.status); })
     .then(function(config) {
       primaryColor = config.color || primaryColor;
       root.style.setProperty('--ai-widget-primary', primaryColor);
       welcomeMessage = config.welcome_message || welcomeMessage;
+
+      // Inject tooltip if enabled and not dismissed
+      var tooltipDismissed = sessionStorage.getItem(tooltipDismissedKey);
+      if (config.tooltip_enabled && !tooltipDismissed) {
+        var tip = document.createElement('div');
+        tip.id = 'ai-widget-tooltip';
+        var tipText = config.tooltip_text || 'Ask us anything \u2014 we reply instantly 24/7';
+        tip.innerHTML = '<span id="ai-widget-tooltip-text">' + tipText + '</span>'
+          + '<button id="ai-widget-tooltip-close" aria-label="Dismiss">\u00D7</button>';
+        root.appendChild(tip);
+        document.getElementById('ai-widget-tooltip-close').addEventListener('click', function() {
+          sessionStorage.setItem(tooltipDismissedKey, '1');
+          tip.remove();
+        });
+      }
+
       btn.style.display = 'flex';
 
-      // Decide initial screen based on return visitor status
-      if (storedEmail) {
-        // Return visitor — go straight to chat
+      // For 10-min resume: pre-load welcome message so chat is ready when popup opens
+      if (storedEmail && canResumeSession()) {
         addMessage('bot', welcomeMessage);
+        welcomeShown = true;
         showChatUI();
       } else {
-        // New visitor — will show intent selection when popup opens
         hideChatUI();
       }
     })
@@ -422,6 +488,8 @@
                   botBubble.textContent += data.token;
                   scrollToBottom();
                 } else if (data.type === 'done') {
+                  // Record last message time for 10-minute resume
+                  sessionStorage.setItem(lastMsgTimeKey, Date.now().toString());
                   setInputDisabled(false);
                 }
               } catch(e) { /* ignore malformed SSE data */ }
@@ -441,27 +509,33 @@
   }
 
   // --- Event wiring ---
-  var popupFirstOpen = true;
   btn.addEventListener('click', function() {
     var isOpen = popup.style.display !== 'none';
     popup.style.display = isOpen ? 'none' : 'flex';
     if (!isOpen) {
-      if (popupFirstOpen && !storedEmail) {
-        // First open for new visitor — show intent selection
-        showIntentSelection();
-        popupFirstOpen = false;
-      } else if (popupFirstOpen && storedEmail) {
-        // Return visitor — chat is already visible, just focus input
+      if (sessionId) {
+        // Active session in progress — continue conversation
         inputEl.focus();
-        popupFirstOpen = false;
+      } else if (storedEmail) {
+        // Returning visitor without active session — show intent (form skipped)
+        showIntentSelection(true);
       } else {
-        inputEl.focus();
+        // New visitor — show intent (form required)
+        showIntentSelection(false);
       }
     }
   });
 
   closeBtn.addEventListener('click', function() {
     popup.style.display = 'none';
+    // If no active session, discard incomplete intent/form flow so next open starts fresh
+    if (!sessionId) {
+      currentIntent = null;
+      var intentEl = document.getElementById('ai-widget-intent');
+      if (intentEl) intentEl.remove();
+      var prechatEl = document.getElementById('ai-widget-prechat');
+      if (prechatEl) prechatEl.remove();
+    }
   });
 
   sendBtn.addEventListener('click', function() {

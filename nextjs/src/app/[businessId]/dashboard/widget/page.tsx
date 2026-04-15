@@ -51,6 +51,8 @@ export default function WidgetPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [copied, setCopied] = useState(false)
+  const [tooltipEnabled, setTooltipEnabled] = useState(true)
+  const [tooltipText, setTooltipText] = useState('Ask us anything — we reply instantly 24/7')
 
   // Visibility settings — all off by default (mirrors DEFAULT_VISIBILITY_SETTINGS in build-system-prompt.ts)
   const [showBusinessName, setShowBusinessName] = useState(false)
@@ -94,6 +96,8 @@ export default function WidgetPage() {
       if (data) {
         setColor(data.color || '#2563EB')
         setWelcomeMessage(data.welcome_message || 'Hi there! How can I help you today?')
+        setTooltipEnabled(data.tooltip_enabled ?? true)
+        setTooltipText(data.tooltip_text || 'Ask us anything — we reply instantly 24/7')
         setShowBusinessName(data.show_business_name ?? false)
         setShowContact(data.show_contact ?? false)
         setShowAddress(data.show_address ?? false)
@@ -141,6 +145,8 @@ export default function WidgetPage() {
       body: JSON.stringify({
         color,
         welcome_message: welcomeMessage,
+        tooltip_enabled: tooltipEnabled,
+        tooltip_text: tooltipText,
         show_business_name: showBusinessName,
         show_contact: showContact,
         show_address: showAddress,
@@ -272,6 +278,40 @@ export default function WidgetPage() {
                 className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="First message your customers will see"
               />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Widget Tooltip</label>
+                  <p className="text-xs text-gray-400 mt-0.5">Shown next to the chat bubble to prompt visitors</p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={tooltipEnabled}
+                  onClick={() => setTooltipEnabled(!tooltipEnabled)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    tooltipEnabled ? 'bg-blue-600' : 'bg-gray-200'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      tooltipEnabled ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+              {tooltipEnabled && (
+                <input
+                  type="text"
+                  value={tooltipText}
+                  onChange={(e) => setTooltipText(e.target.value)}
+                  maxLength={100}
+                  className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Ask us anything — we reply instantly 24/7"
+                />
+              )}
             </div>
 
             <button

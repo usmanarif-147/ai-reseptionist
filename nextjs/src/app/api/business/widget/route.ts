@@ -37,6 +37,8 @@ export async function PUT(request: NextRequest) {
   const {
     color,
     welcome_message,
+    tooltip_enabled,
+    tooltip_text,
     show_business_name,
     show_contact,
     show_address,
@@ -60,6 +62,8 @@ export async function PUT(request: NextRequest) {
     .update({
       color: color || '#2563eb',
       welcome_message: welcome_message || 'How can we help you today?',
+      tooltip_enabled: tooltip_enabled ?? true,
+      tooltip_text: tooltip_text || 'Ask us anything — we reply instantly 24/7',
       show_business_name: show_business_name ?? DEFAULT_VISIBILITY_SETTINGS.show_business_name,
       show_contact: show_contact ?? DEFAULT_VISIBILITY_SETTINGS.show_contact,
       show_address: show_address ?? DEFAULT_VISIBILITY_SETTINGS.show_address,

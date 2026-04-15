@@ -206,7 +206,8 @@ export async function POST(
       contact: businessData?.contact,
       address: businessData?.address,
       type: businessData?.type,
-    }
+    },
+    body.intent || undefined
   )
 
   // Persist user message
