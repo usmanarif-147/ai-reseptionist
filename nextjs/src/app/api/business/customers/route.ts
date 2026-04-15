@@ -1,13 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticateAndGetBusiness } from '@/lib/auth'
-
-function deriveCustomerType(totalSessions: number, totalAppointments: number): string {
-  if (totalAppointments >= 3) return 'regular_customer'
-  if (totalAppointments >= 1) return 'booked_customer'
-  if (totalSessions >= 3 && totalAppointments === 0) return 'interested_prospect'
-  if (totalSessions > 1 && totalAppointments === 0) return 'returning_visitor'
-  return 'new_visitor'
-}
+import { deriveCustomerType } from '@/lib/widget-customer-type'
 
 export async function GET(request: NextRequest) {
   const auth = await authenticateAndGetBusiness()
