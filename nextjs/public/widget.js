@@ -29,52 +29,70 @@
   // --- Inject CSS ---
   var style = document.createElement('style');
   style.textContent = [
-    '#ai-widget-root { position: fixed; bottom: 24px; right: 24px; z-index: 2147483647; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }',
+    // Root & reset
+    '#ai-widget-root { position: fixed; bottom: 20px; right: 20px; z-index: 2147483647; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }',
     '#ai-widget-root * { box-sizing: border-box; margin: 0; padding: 0; }',
-    '#ai-widget-btn { display: none; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: 50%; background: var(--ai-widget-primary, #2563eb); color: #fff; border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15); transition: transform 0.15s ease; }',
-    '#ai-widget-btn:hover { transform: scale(1.08); }',
-    '#ai-widget-btn svg { width: 24px; height: 24px; fill: #fff; }',
-    '#ai-widget-popup { position: fixed; bottom: 90px; right: 24px; width: 360px; max-width: calc(100vw - 32px); height: 500px; max-height: calc(100vh - 120px); background: #fff; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); display: flex; flex-direction: column; overflow: hidden; }',
-    '#ai-widget-header { background: var(--ai-widget-primary, #2563eb); color: #fff; padding: 16px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }',
+    // Launcher button
+    '#ai-widget-btn { display: none; align-items: center; justify-content: center; width: 54px; height: 54px; border-radius: 50%; background: var(--ai-widget-primary, #2563eb); color: #fff; border: none; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,0.2); transition: transform 0.15s ease, box-shadow 0.15s ease; }',
+    '#ai-widget-btn:hover { transform: scale(1.07); box-shadow: 0 6px 20px rgba(0,0,0,0.25); }',
+    '#ai-widget-btn svg { width: 22px; height: 22px; fill: #fff; }',
+    // Popup shell
+    '#ai-widget-popup { position: fixed; bottom: 84px; right: 20px; width: 348px; max-width: calc(100vw - 40px); height: 520px; max-height: calc(100vh - 110px); background: #fff; border-radius: 16px; box-shadow: 0 12px 40px rgba(0,0,0,0.16); display: flex; flex-direction: column; overflow: hidden; }',
+    // Header
+    '#ai-widget-header { background: var(--ai-widget-primary, #2563eb); color: #fff; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }',
+    '#ai-widget-header-info { display: flex; flex-direction: column; gap: 2px; }',
+    '#ai-widget-title { font-size: 15px; font-weight: 700; line-height: 1.2; }',
+    '#ai-widget-header-sub { font-size: 11px; opacity: 0.8; }',
+    '#ai-widget-close { background: rgba(255,255,255,0.15); border: none; color: #fff; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background 0.15s; }',
+    '#ai-widget-close:hover { background: rgba(255,255,255,0.25); }',
+    // Body
     '#ai-widget-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; }',
-    '#ai-widget-title { font-size: 16px; font-weight: 600; }',
-    '#ai-widget-close { background: transparent; border: none; color: #fff; font-size: 20px; cursor: pointer; padding: 0 4px; line-height: 1; }',
-    '#ai-widget-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; }',
-    '#ai-widget-messages .ai-widget-msg-user { align-self: flex-end; background: var(--ai-widget-primary, #2563eb); color: #fff; padding: 8px 14px; border-radius: 16px 16px 4px 16px; max-width: 80%; word-wrap: break-word; font-size: 14px; line-height: 1.4; }',
-    '#ai-widget-messages .ai-widget-msg-bot { align-self: flex-start; background: #f3f4f6; color: #1f2937; padding: 8px 14px; border-radius: 16px 16px 16px 4px; max-width: 80%; word-wrap: break-word; font-size: 14px; line-height: 1.4; white-space: pre-wrap; }',
-    '#ai-widget-input-row { padding: 12px; display: flex; gap: 8px; border-top: 1px solid #e5e7eb; flex-shrink: 0; }',
-    '#ai-widget-input { flex: 1; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 12px; font-size: 14px; outline: none; font-family: inherit; }',
-    '#ai-widget-input:focus { border-color: var(--ai-widget-primary, #2563eb); box-shadow: 0 0 0 2px rgba(37,99,235,0.15); }',
-    '#ai-widget-send { background: var(--ai-widget-primary, #2563eb); color: #fff; border: none; border-radius: 8px; padding: 8px 16px; cursor: pointer; font-size: 14px; font-family: inherit; }',
-    '#ai-widget-send:disabled, #ai-widget-input:disabled { opacity: 0.6; cursor: not-allowed; }',
-    // Intent selection styles
-    '.ai-widget-intent-wrap { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 20px 20px 16px; gap: 10px; }',
-    '.ai-widget-intent-heading { text-align: center; margin-bottom: 4px; }',
-    '.ai-widget-intent-label { font-size: 16px; font-weight: 700; color: #111827; display: block; }',
-    '.ai-widget-intent-sublabel { font-size: 13px; color: #6b7280; margin-top: 2px; display: block; }',
-    '.ai-widget-intent-btn { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border: 1.5px solid #e5e7eb; border-radius: 10px; background: #fff; color: #1f2937; font-size: 14px; font-family: inherit; cursor: pointer; text-align: left; transition: border-color 0.15s, background 0.15s, box-shadow 0.15s; }',
-    '.ai-widget-intent-btn:hover { border-color: var(--ai-widget-primary, #2563eb); background: #f5f8ff; box-shadow: 0 1px 4px rgba(37,99,235,0.08); }',
-    '.ai-widget-intent-icon { flex-shrink: 0; width: 36px; height: 36px; border-radius: 8px; background: rgba(37,99,235,0.08); display: flex; align-items: center; justify-content: center; font-size: 18px; line-height: 1; }',
+    // Messages
+    '#ai-widget-messages { flex: 1; overflow-y: auto; padding: 14px 14px 8px; display: flex; flex-direction: column; gap: 10px; }',
+    '.ai-widget-msg-row { display: flex; align-items: flex-end; gap: 8px; }',
+    '.ai-widget-msg-row.bot-row { justify-content: flex-start; }',
+    '.ai-widget-msg-row.user-row { justify-content: flex-end; }',
+    '.ai-widget-msg-avatar { width: 26px; height: 26px; border-radius: 50%; background: var(--ai-widget-primary, #2563eb); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 13px; }',
+    '.ai-widget-msg-user { background: var(--ai-widget-primary, #2563eb); color: #fff; padding: 9px 13px; border-radius: 16px 16px 4px 16px; max-width: 78%; word-wrap: break-word; font-size: 13.5px; line-height: 1.5; }',
+    '.ai-widget-msg-bot { background: #f3f4f6; color: #1f2937; padding: 9px 13px; border-radius: 16px 16px 16px 4px; max-width: 78%; word-wrap: break-word; font-size: 13.5px; line-height: 1.5; white-space: pre-wrap; }',
+    // Input row — pill input + circular icon button
+    '#ai-widget-input-row { padding: 10px 12px; display: flex; gap: 8px; border-top: 1px solid #f0f0f0; flex-shrink: 0; align-items: center; }',
+    '#ai-widget-input { flex: 1; border: 1.5px solid #e5e7eb; border-radius: 20px; padding: 8px 14px; font-size: 13.5px; outline: none; font-family: inherit; background: #f9fafb; transition: border-color 0.15s, background 0.15s; }',
+    '#ai-widget-input:focus { border-color: var(--ai-widget-primary, #2563eb); background: #fff; }',
+    '#ai-widget-send { background: var(--ai-widget-primary, #2563eb); color: #fff; border: none; border-radius: 50%; width: 36px; height: 36px; min-width: 36px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: opacity 0.15s; }',
+    '#ai-widget-send:hover { opacity: 0.88; }',
+    '#ai-widget-send svg { width: 16px; height: 16px; fill: #fff; }',
+    '#ai-widget-send:disabled, #ai-widget-input:disabled { opacity: 0.45; cursor: not-allowed; }',
+    // Intent selection
+    '.ai-widget-intent-wrap { flex: 1; display: flex; flex-direction: column; padding: 20px 16px 16px; gap: 10px; }',
+    '.ai-widget-intent-heading { text-align: center; padding-bottom: 6px; }',
+    '.ai-widget-intent-label { font-size: 17px; font-weight: 700; color: #111827; display: block; }',
+    '.ai-widget-intent-sublabel { font-size: 12px; color: #9ca3af; margin-top: 4px; display: block; }',
+    '.ai-widget-intent-btn { display: flex; align-items: center; gap: 14px; width: 100%; padding: 15px 16px; border: none; border-radius: 14px; color: #fff; font-family: inherit; cursor: pointer; transition: transform 0.12s, box-shadow 0.12s; text-align: left; }',
+    '.ai-widget-intent-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,0,0,0.15); }',
+    '.ai-widget-intent-icon-wrap { width: 40px; height: 40px; border-radius: 10px; background: rgba(255,255,255,0.22); display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }',
     '.ai-widget-intent-text { flex: 1; }',
-    '.ai-widget-intent-name { display: block; font-size: 13px; font-weight: 600; color: #1f2937; }',
-    '.ai-widget-intent-desc { display: block; font-size: 12px; color: #6b7280; margin-top: 1px; }',
-    '.ai-widget-intent-arrow { color: #9ca3af; font-size: 16px; flex-shrink: 0; }',
-    '.ai-widget-powered { text-align: center; font-size: 11px; color: #9ca3af; margin-top: 4px; }',
-    // Pre-chat form styles
-    '.ai-widget-form-wrap { flex: 1; overflow-y: auto; padding: 16px 20px 20px; }',
-    '.ai-widget-form-back { background: none; border: none; padding: 0; font-size: 12px; color: #6b7280; cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; gap: 4px; margin-bottom: 12px; }',
-    '.ai-widget-form-back:hover { color: #374151; }',
-    '.ai-widget-form-title { font-size: 15px; font-weight: 600; color: #1f2937; margin-bottom: 4px; }',
-    '.ai-widget-form-subtitle { font-size: 12px; color: #6b7280; margin-bottom: 16px; }',
-    '.ai-widget-form-group { margin-bottom: 12px; }',
-    '.ai-widget-form-label { display: block; font-size: 13px; font-weight: 500; color: #374151; margin-bottom: 4px; }',
-    '.ai-widget-form-label .req { color: #ef4444; margin-left: 2px; }',
-    '.ai-widget-form-input { width: 100%; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 12px; font-size: 14px; font-family: inherit; outline: none; }',
-    '.ai-widget-form-input:focus { border-color: var(--ai-widget-primary, #2563eb); box-shadow: 0 0 0 2px rgba(37,99,235,0.15); }',
+    '.ai-widget-intent-name { display: block; font-size: 14px; font-weight: 700; }',
+    '.ai-widget-intent-desc { display: block; font-size: 11.5px; opacity: 0.8; margin-top: 2px; }',
+    '.ai-widget-intent-chevron { opacity: 0.6; font-size: 20px; font-weight: 300; flex-shrink: 0; }',
+    '.ai-widget-powered { margin-top: auto; text-align: center; font-size: 11px; color: #d1d5db; padding-top: 8px; }',
+    // Pre-chat form
+    '.ai-widget-form-wrap { flex: 1; overflow-y: auto; }',
+    '.ai-widget-form-inner { padding: 16px 18px 20px; }',
+    '.ai-widget-form-back { background: none; border: none; padding: 0 0 14px; font-size: 12px; font-weight: 600; color: var(--ai-widget-primary, #2563eb); cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; gap: 4px; }',
+    '.ai-widget-form-back:hover { opacity: 0.7; }',
+    '.ai-widget-form-title { font-size: 16px; font-weight: 700; color: #111827; margin-bottom: 3px; }',
+    '.ai-widget-form-subtitle { font-size: 12px; color: #9ca3af; margin-bottom: 18px; }',
+    '.ai-widget-form-group { margin-bottom: 13px; }',
+    '.ai-widget-form-label { display: block; font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 5px; }',
+    '.ai-widget-form-label .req { color: #ef4444; margin-left: 1px; }',
+    '.ai-widget-form-input { width: 100%; border: 1.5px solid #e5e7eb; border-radius: 8px; padding: 9px 12px; font-size: 13.5px; font-family: inherit; outline: none; background: #fff; color: #1f2937; transition: border-color 0.15s; }',
+    '.ai-widget-form-input:focus { border-color: var(--ai-widget-primary, #2563eb); box-shadow: 0 0 0 3px rgba(37,99,235,0.08); }',
     '.ai-widget-form-input.error { border-color: #ef4444; }',
-    '.ai-widget-form-error { font-size: 12px; color: #ef4444; margin-top: 2px; }',
-    '.ai-widget-form-submit { display: block; width: 100%; margin-top: 16px; padding: 10px 16px; border: none; border-radius: 8px; background: var(--ai-widget-primary, #2563eb); color: #fff; font-size: 14px; font-weight: 500; font-family: inherit; cursor: pointer; }',
-    '.ai-widget-form-submit:disabled { opacity: 0.6; cursor: not-allowed; }'
+    '.ai-widget-form-error { font-size: 11.5px; color: #ef4444; margin-top: 3px; }',
+    '.ai-widget-form-submit { display: block; width: 100%; margin-top: 20px; padding: 12px 16px; border: none; border-radius: 10px; background: var(--ai-widget-primary, #2563eb); color: #fff; font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer; transition: opacity 0.15s; }',
+    '.ai-widget-form-submit:hover { opacity: 0.9; }',
+    '.ai-widget-form-submit:disabled { opacity: 0.5; cursor: not-allowed; }'
   ].join('\n');
   document.head.appendChild(style);
 
@@ -87,14 +105,14 @@
     '</button>',
     '<div id="ai-widget-popup" aria-label="Chat with us" role="dialog" style="display:none">',
       '<div id="ai-widget-header">',
-        '<span id="ai-widget-title">Chat with us</span>',
+        '<div id="ai-widget-header-info"><span id="ai-widget-title">Chat with us</span><span id="ai-widget-header-sub">We reply instantly</span></div>',
         '<button id="ai-widget-close" aria-label="Close chat">\u2715</button>',
       '</div>',
       '<div id="ai-widget-body">',
         '<div id="ai-widget-messages"></div>',
         '<div id="ai-widget-input-row">',
           '<input id="ai-widget-input" type="text" placeholder="Type a message..." aria-label="Type your message" autocomplete="off"/>',
-          '<button id="ai-widget-send">Send</button>',
+          '<button id="ai-widget-send" aria-label="Send message"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>',
         '</div>',
       '</div>',
     '</div>'
@@ -112,12 +130,21 @@
 
   // --- Helper functions ---
   function addMessage(role, text) {
-    var div = document.createElement('div');
-    div.className = role === 'user' ? 'ai-widget-msg-user' : 'ai-widget-msg-bot';
-    div.textContent = text;
-    messagesEl.appendChild(div);
+    var row = document.createElement('div');
+    row.className = 'ai-widget-msg-row ' + (role === 'user' ? 'user-row' : 'bot-row');
+    var bubble = document.createElement('div');
+    bubble.className = role === 'user' ? 'ai-widget-msg-user' : 'ai-widget-msg-bot';
+    bubble.textContent = text;
+    if (role === 'bot') {
+      var avatar = document.createElement('div');
+      avatar.className = 'ai-widget-msg-avatar';
+      avatar.textContent = '\uD83E\uDD16';
+      row.appendChild(avatar);
+    }
+    row.appendChild(bubble);
+    messagesEl.appendChild(row);
     scrollToBottom();
-    return div;
+    return bubble;
   }
 
   function scrollToBottom() {
@@ -159,29 +186,20 @@
         '<span class="ai-widget-intent-label">How can we help you?</span>',
         '<span class="ai-widget-intent-sublabel">Select an option to get started</span>',
       '</div>',
-      '<button class="ai-widget-intent-btn" data-intent="basic_information">',
-        '<span class="ai-widget-intent-icon">💬</span>',
-        '<span class="ai-widget-intent-text">',
-          '<span class="ai-widget-intent-name">Basic Information</span>',
-          '<span class="ai-widget-intent-desc">Services, hours, pricing & more</span>',
-        '</span>',
-        '<span class="ai-widget-intent-arrow">›</span>',
+      '<button class="ai-widget-intent-btn" data-intent="basic_information" style="background:#3b82f6">',
+        '<span class="ai-widget-intent-icon-wrap">\uD83D\uDCAC</span>',
+        '<span class="ai-widget-intent-text"><span class="ai-widget-intent-name">Basic Information</span><span class="ai-widget-intent-desc">Ask questions about our services</span></span>',
+        '<span class="ai-widget-intent-chevron">\u203A</span>',
       '</button>',
-      '<button class="ai-widget-intent-btn" data-intent="book_appointment">',
-        '<span class="ai-widget-intent-icon">📅</span>',
-        '<span class="ai-widget-intent-text">',
-          '<span class="ai-widget-intent-name">Book an Appointment</span>',
-          '<span class="ai-widget-intent-desc">Schedule a new appointment</span>',
-        '</span>',
-        '<span class="ai-widget-intent-arrow">›</span>',
+      '<button class="ai-widget-intent-btn" data-intent="book_appointment" style="background:#10b981">',
+        '<span class="ai-widget-intent-icon-wrap">\uD83D\uDCC5</span>',
+        '<span class="ai-widget-intent-text"><span class="ai-widget-intent-name">Book an Appointment</span><span class="ai-widget-intent-desc">Schedule a visit with us</span></span>',
+        '<span class="ai-widget-intent-chevron">\u203A</span>',
       '</button>',
-      '<button class="ai-widget-intent-btn" data-intent="appointment_details">',
-        '<span class="ai-widget-intent-icon">🔍</span>',
-        '<span class="ai-widget-intent-text">',
-          '<span class="ai-widget-intent-name">Appointment Details</span>',
-          '<span class="ai-widget-intent-desc">Check an existing appointment</span>',
-        '</span>',
-        '<span class="ai-widget-intent-arrow">›</span>',
+      '<button class="ai-widget-intent-btn" data-intent="appointment_details" style="background:#f59e0b">',
+        '<span class="ai-widget-intent-icon-wrap">\uD83D\uDD0D</span>',
+        '<span class="ai-widget-intent-text"><span class="ai-widget-intent-name">Appointment Details</span><span class="ai-widget-intent-desc">Check or manage an existing booking</span></span>',
+        '<span class="ai-widget-intent-chevron">\u203A</span>',
       '</button>',
       '<div class="ai-widget-powered">Powered by AI Receptionist</div>',
     ].join('');
@@ -213,30 +231,32 @@
     wrap.id = 'ai-widget-prechat';
     wrap.className = 'ai-widget-form-wrap';
     wrap.innerHTML = [
-      '<button class="ai-widget-form-back" id="ai-pcf-back">&#8592; Back</button>',
-      '<div class="ai-widget-form-title">Just a few details</div>',
-      '<div class="ai-widget-form-subtitle">We\'ll remember you for next time</div>',
-      '<div class="ai-widget-form-group">',
-        '<label class="ai-widget-form-label">Email<span class="req">*</span></label>',
-        '<input class="ai-widget-form-input" id="ai-pcf-email" type="email" placeholder="you@example.com" />',
-        '<div class="ai-widget-form-error" id="ai-pcf-email-err"></div>',
-      '</div>',
-      '<div class="ai-widget-form-group">',
-        '<label class="ai-widget-form-label">Name</label>',
-        '<input class="ai-widget-form-input" id="ai-pcf-name" type="text" placeholder="Your name (optional)" />',
-      '</div>',
-      '<div class="ai-widget-form-group">',
-        '<label class="ai-widget-form-label">Phone</label>',
-        '<input class="ai-widget-form-input" id="ai-pcf-phone" type="tel" placeholder="Phone number (optional)" />',
-      '</div>',
-      showApptField ? [
+      '<div class="ai-widget-form-inner">',
+        '<button class="ai-widget-form-back" id="ai-pcf-back">&#8592; Select option</button>',
+        '<div class="ai-widget-form-title">Just a few details</div>',
+        '<div class="ai-widget-form-subtitle">We\'ll remember you for next time</div>',
         '<div class="ai-widget-form-group">',
-          '<label class="ai-widget-form-label">Appointment Number<span class="req">*</span></label>',
-          '<input class="ai-widget-form-input" id="ai-pcf-appt" type="text" placeholder="e.g. APT-12345" />',
-          '<div class="ai-widget-form-error" id="ai-pcf-appt-err"></div>',
+          '<label class="ai-widget-form-label">Email<span class="req">*</span></label>',
+          '<input class="ai-widget-form-input" id="ai-pcf-email" type="email" placeholder="you@example.com" />',
+          '<div class="ai-widget-form-error" id="ai-pcf-email-err"></div>',
         '</div>',
-      ].join('') : '',
-      '<button class="ai-widget-form-submit" id="ai-pcf-submit">Start Chat</button>',
+        '<div class="ai-widget-form-group">',
+          '<label class="ai-widget-form-label">Name</label>',
+          '<input class="ai-widget-form-input" id="ai-pcf-name" type="text" placeholder="Your name (optional)" />',
+        '</div>',
+        '<div class="ai-widget-form-group">',
+          '<label class="ai-widget-form-label">Phone</label>',
+          '<input class="ai-widget-form-input" id="ai-pcf-phone" type="tel" placeholder="Phone number (optional)" />',
+        '</div>',
+        showApptField ? [
+          '<div class="ai-widget-form-group">',
+            '<label class="ai-widget-form-label">Appointment Number<span class="req">*</span></label>',
+            '<input class="ai-widget-form-input" id="ai-pcf-appt" type="text" placeholder="e.g. APT-12345" />',
+            '<div class="ai-widget-form-error" id="ai-pcf-appt-err"></div>',
+          '</div>',
+        ].join('') : '',
+        '<button class="ai-widget-form-submit" id="ai-pcf-submit">Start Chat \u2192</button>',
+      '</div>',
     ].join('');
     bodyEl.insertBefore(wrap, messagesEl);
 
