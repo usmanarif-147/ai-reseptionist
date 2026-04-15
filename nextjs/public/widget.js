@@ -8,6 +8,23 @@
   var API_BASE = script.src.replace('/widget.js', '');
   var primaryColor = '#2563eb';
   var sessionId = sessionStorage.getItem('ai-widget-session-' + businessId) || null;
+  var intentKey = 'ai-widget-intent-' + businessId;
+  var currentIntent = localStorage.getItem(intentKey) || null;
+
+  // --- Visitor ID ---
+  var visitorKey = 'ai-widget-visitor-' + businessId;
+  var visitorId = localStorage.getItem(visitorKey);
+  if (!visitorId) {
+    visitorId = crypto.randomUUID();
+    localStorage.setItem(visitorKey, visitorId);
+  }
+  // Fire-and-forget ping
+  fetch(API_BASE + '/api/widget/' + businessId + '/visitor-ping?visitor_id=' + visitorId)
+    .catch(function() {}); // silent — never block UI
+
+  // --- Return visitor check ---
+  var emailKey = 'ai-widget-email-' + businessId;
+  var storedEmail = localStorage.getItem(emailKey);
 
   // --- Inject CSS ---
   var style = document.createElement('style');
@@ -28,7 +45,24 @@
     '#ai-widget-input { flex: 1; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 12px; font-size: 14px; outline: none; font-family: inherit; }',
     '#ai-widget-input:focus { border-color: var(--ai-widget-primary, #2563eb); box-shadow: 0 0 0 2px rgba(37,99,235,0.15); }',
     '#ai-widget-send { background: var(--ai-widget-primary, #2563eb); color: #fff; border: none; border-radius: 8px; padding: 8px 16px; cursor: pointer; font-size: 14px; font-family: inherit; }',
-    '#ai-widget-send:disabled, #ai-widget-input:disabled { opacity: 0.6; cursor: not-allowed; }'
+    '#ai-widget-send:disabled, #ai-widget-input:disabled { opacity: 0.6; cursor: not-allowed; }',
+    // Intent selection styles
+    '.ai-widget-intent-wrap { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 24px; gap: 12px; }',
+    '.ai-widget-intent-label { font-size: 15px; font-weight: 600; color: #1f2937; text-align: center; margin-bottom: 4px; }',
+    '.ai-widget-intent-btn { display: block; width: 100%; padding: 12px 16px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; color: #374151; font-size: 14px; font-family: inherit; cursor: pointer; text-align: left; transition: border-color 0.15s, background 0.15s; }',
+    '.ai-widget-intent-btn:hover { border-color: var(--ai-widget-primary, #2563eb); background: #f0f5ff; }',
+    // Pre-chat form styles
+    '.ai-widget-form-wrap { flex: 1; overflow-y: auto; padding: 20px; }',
+    '.ai-widget-form-title { font-size: 15px; font-weight: 600; color: #1f2937; margin-bottom: 16px; }',
+    '.ai-widget-form-group { margin-bottom: 12px; }',
+    '.ai-widget-form-label { display: block; font-size: 13px; font-weight: 500; color: #374151; margin-bottom: 4px; }',
+    '.ai-widget-form-label .req { color: #ef4444; margin-left: 2px; }',
+    '.ai-widget-form-input { width: 100%; border: 1px solid #d1d5db; border-radius: 8px; padding: 8px 12px; font-size: 14px; font-family: inherit; outline: none; }',
+    '.ai-widget-form-input:focus { border-color: var(--ai-widget-primary, #2563eb); box-shadow: 0 0 0 2px rgba(37,99,235,0.15); }',
+    '.ai-widget-form-input.error { border-color: #ef4444; }',
+    '.ai-widget-form-error { font-size: 12px; color: #ef4444; margin-top: 2px; }',
+    '.ai-widget-form-submit { display: block; width: 100%; margin-top: 16px; padding: 10px 16px; border: none; border-radius: 8px; background: var(--ai-widget-primary, #2563eb); color: #fff; font-size: 14px; font-weight: 500; font-family: inherit; cursor: pointer; }',
+    '.ai-widget-form-submit:disabled { opacity: 0.6; cursor: not-allowed; }'
   ].join('\n');
   document.head.appendChild(style);
 
@@ -44,10 +78,12 @@
         '<span id="ai-widget-title">Chat with us</span>',
         '<button id="ai-widget-close" aria-label="Close chat">\u2715</button>',
       '</div>',
-      '<div id="ai-widget-messages"></div>',
-      '<div id="ai-widget-input-row">',
-        '<input id="ai-widget-input" type="text" placeholder="Type a message..." aria-label="Type your message" autocomplete="off"/>',
-        '<button id="ai-widget-send">Send</button>',
+      '<div id="ai-widget-body">',
+        '<div id="ai-widget-messages"></div>',
+        '<div id="ai-widget-input-row">',
+          '<input id="ai-widget-input" type="text" placeholder="Type a message..." aria-label="Type your message" autocomplete="off"/>',
+          '<button id="ai-widget-send">Send</button>',
+        '</div>',
       '</div>',
     '</div>'
   ].join('');
@@ -57,6 +93,7 @@
   var btn = document.getElementById('ai-widget-btn');
   var popup = document.getElementById('ai-widget-popup');
   var closeBtn = document.getElementById('ai-widget-close');
+  var bodyEl = document.getElementById('ai-widget-body');
   var messagesEl = document.getElementById('ai-widget-messages');
   var inputEl = document.getElementById('ai-widget-input');
   var sendBtn = document.getElementById('ai-widget-send');
@@ -83,14 +120,188 @@
     }
   }
 
+  function showChatUI() {
+    messagesEl.style.display = 'flex';
+    document.getElementById('ai-widget-input-row').style.display = 'flex';
+  }
+
+  function hideChatUI() {
+    messagesEl.style.display = 'none';
+    document.getElementById('ai-widget-input-row').style.display = 'none';
+  }
+
+  // --- Intent Selection ---
+  function showIntentSelection() {
+    hideChatUI();
+    // Remove any existing intent/form screens
+    var existing = document.getElementById('ai-widget-intent');
+    if (existing) existing.remove();
+    existing = document.getElementById('ai-widget-prechat');
+    if (existing) existing.remove();
+
+    var wrap = document.createElement('div');
+    wrap.id = 'ai-widget-intent';
+    wrap.className = 'ai-widget-intent-wrap';
+    wrap.innerHTML = [
+      '<div class="ai-widget-intent-label">How can we help you?</div>',
+      '<button class="ai-widget-intent-btn" data-intent="basic_information">Basic Information</button>',
+      '<button class="ai-widget-intent-btn" data-intent="book_appointment">Book an Appointment</button>',
+      '<button class="ai-widget-intent-btn" data-intent="appointment_details">Appointment Details</button>',
+    ].join('');
+    bodyEl.insertBefore(wrap, messagesEl);
+
+    var buttons = wrap.querySelectorAll('.ai-widget-intent-btn');
+    buttons.forEach(function(b) {
+      b.addEventListener('click', function() {
+        currentIntent = b.getAttribute('data-intent');
+        localStorage.setItem(intentKey, currentIntent);
+        showPreChatForm();
+      });
+    });
+  }
+
+  // --- Pre-chat Form ---
+  function showPreChatForm() {
+    // Remove intent screen
+    var intentEl = document.getElementById('ai-widget-intent');
+    if (intentEl) intentEl.remove();
+    var existing = document.getElementById('ai-widget-prechat');
+    if (existing) existing.remove();
+
+    hideChatUI();
+
+    var showApptField = currentIntent === 'appointment_details';
+
+    var wrap = document.createElement('div');
+    wrap.id = 'ai-widget-prechat';
+    wrap.className = 'ai-widget-form-wrap';
+    wrap.innerHTML = [
+      '<div class="ai-widget-form-title">Before we start, tell us a bit about yourself</div>',
+      '<div class="ai-widget-form-group">',
+        '<label class="ai-widget-form-label">Email<span class="req">*</span></label>',
+        '<input class="ai-widget-form-input" id="ai-pcf-email" type="email" placeholder="you@example.com" />',
+        '<div class="ai-widget-form-error" id="ai-pcf-email-err"></div>',
+      '</div>',
+      '<div class="ai-widget-form-group">',
+        '<label class="ai-widget-form-label">Name</label>',
+        '<input class="ai-widget-form-input" id="ai-pcf-name" type="text" placeholder="Your name (optional)" />',
+      '</div>',
+      '<div class="ai-widget-form-group">',
+        '<label class="ai-widget-form-label">Phone</label>',
+        '<input class="ai-widget-form-input" id="ai-pcf-phone" type="tel" placeholder="Phone number (optional)" />',
+      '</div>',
+      showApptField ? [
+        '<div class="ai-widget-form-group">',
+          '<label class="ai-widget-form-label">Appointment Number<span class="req">*</span></label>',
+          '<input class="ai-widget-form-input" id="ai-pcf-appt" type="text" placeholder="e.g. APT-12345" />',
+          '<div class="ai-widget-form-error" id="ai-pcf-appt-err"></div>',
+        '</div>',
+      ].join('') : '',
+      '<button class="ai-widget-form-submit" id="ai-pcf-submit">Start Chat</button>',
+    ].join('');
+    bodyEl.insertBefore(wrap, messagesEl);
+
+    var submitBtn = document.getElementById('ai-pcf-submit');
+    submitBtn.addEventListener('click', handlePreChatSubmit);
+  }
+
+  function handlePreChatSubmit() {
+    var emailInput = document.getElementById('ai-pcf-email');
+    var nameInput = document.getElementById('ai-pcf-name');
+    var phoneInput = document.getElementById('ai-pcf-phone');
+    var apptInput = document.getElementById('ai-pcf-appt');
+    var emailErr = document.getElementById('ai-pcf-email-err');
+    var apptErr = document.getElementById('ai-pcf-appt-err');
+
+    var email = emailInput.value.trim();
+    var name = nameInput.value.trim();
+    var phone = phoneInput.value.trim();
+    var apptNumber = apptInput ? apptInput.value.trim() : '';
+
+    // Reset errors
+    emailInput.classList.remove('error');
+    if (emailErr) emailErr.textContent = '';
+    if (apptInput) apptInput.classList.remove('error');
+    if (apptErr) apptErr.textContent = '';
+
+    // Validate email
+    var emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    var hasError = false;
+    if (!email || !emailRegex.test(email)) {
+      emailInput.classList.add('error');
+      emailErr.textContent = 'Please enter a valid email address';
+      hasError = true;
+    }
+
+    // Validate appointment number if required
+    if (currentIntent === 'appointment_details' && !apptNumber) {
+      apptInput.classList.add('error');
+      apptErr.textContent = 'Appointment number is required';
+      hasError = true;
+    }
+
+    if (hasError) return;
+
+    var submitBtn = document.getElementById('ai-pcf-submit');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Please wait...';
+
+    var body = {
+      email: email,
+      name: name || null,
+      phone: phone || null,
+      visitor_id: visitorId,
+      intent: currentIntent,
+      session_id: null,
+    };
+
+    fetch(API_BASE + '/api/widget/' + businessId + '/customer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+      .then(function(r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function(data) {
+        localStorage.setItem(emailKey, email);
+        sessionStorage.setItem('ai-widget-customer-id-' + businessId, data.customer_id);
+        openChat();
+      })
+      .catch(function() {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Start Chat';
+        emailErr.textContent = 'Something went wrong. Please try again.';
+      });
+  }
+
+  // --- Open Chat ---
+  function openChat() {
+    // Remove intent and prechat screens
+    var intentEl = document.getElementById('ai-widget-intent');
+    if (intentEl) intentEl.remove();
+    var prechatEl = document.getElementById('ai-widget-prechat');
+    if (prechatEl) prechatEl.remove();
+    showChatUI();
+  }
+
   // --- Config fetch ---
+  var welcomeMessage = 'How can we help you today?';
   fetch(API_BASE + '/api/widget/' + businessId + '/config')
     .then(function(r) { return r.ok ? r.json() : Promise.reject(r.status); })
     .then(function(config) {
       primaryColor = config.color || primaryColor;
       root.style.setProperty('--ai-widget-primary', primaryColor);
-      addMessage('bot', config.welcome_message || 'How can we help you today?');
+      welcomeMessage = config.welcome_message || welcomeMessage;
       btn.style.display = 'flex';
+
+      // Decide initial screen based on return visitor status
+      if (storedEmail) {
+        // Return visitor — go straight to chat
+        addMessage('bot', welcomeMessage);
+        showChatUI();
+      } else {
+        // New visitor — will show intent selection when popup opens
+        hideChatUI();
+      }
     })
     .catch(function() {
       root.style.display = 'none';
@@ -108,7 +319,12 @@
     fetch(API_BASE + '/api/widget/' + businessId + '/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionId, message: userMsg })
+      body: JSON.stringify({
+        session_id: sessionId,
+        message: userMsg,
+        customer_id: sessionStorage.getItem('ai-widget-customer-id-' + businessId) || null,
+        intent: currentIntent || null,
+      })
     }).then(function(response) {
       if (!response.ok) {
         throw new Error('Request failed');
@@ -157,11 +373,22 @@
   }
 
   // --- Event wiring ---
+  var popupFirstOpen = true;
   btn.addEventListener('click', function() {
     var isOpen = popup.style.display !== 'none';
     popup.style.display = isOpen ? 'none' : 'flex';
     if (!isOpen) {
-      inputEl.focus();
+      if (popupFirstOpen && !storedEmail) {
+        // First open for new visitor — show intent selection
+        showIntentSelection();
+        popupFirstOpen = false;
+      } else if (popupFirstOpen && storedEmail) {
+        // Return visitor — chat is already visible, just focus input
+        inputEl.focus();
+        popupFirstOpen = false;
+      } else {
+        inputEl.focus();
+      }
     }
   });
 

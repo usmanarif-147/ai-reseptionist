@@ -32,7 +32,7 @@ export async function POST(
     )
   }
 
-  let body: { session_id?: string; message?: string }
+  let body: { session_id?: string; message?: string; customer_id?: string; intent?: string }
   try {
     body = await request.json()
   } catch {
@@ -68,7 +68,7 @@ export async function POST(
     // Verify session belongs to this business
     const { data: session } = await supabase
       .from('chat_sessions')
-      .select('id')
+      .select('id, customer_id')
       .eq('id', sessionId)
       .eq('business_id', businessId)
       .single()
@@ -78,6 +78,18 @@ export async function POST(
         { error: 'Session not found' },
         { status: 404, headers: CORS_HEADERS }
       )
+    }
+
+    // Link customer to existing session if not already linked
+    if (body.customer_id && UUID_REGEX.test(body.customer_id) && !session.customer_id) {
+      await supabase
+        .from('chat_sessions')
+        .update({
+          customer_id: body.customer_id,
+          intent: body.intent || null,
+        })
+        .eq('id', sessionId)
+        .eq('business_id', businessId)
     }
   } else {
     // Verify business exists before creating a session
@@ -94,9 +106,17 @@ export async function POST(
       )
     }
 
+    const sessionInsert: Record<string, unknown> = { business_id: businessId }
+    if (body.customer_id && UUID_REGEX.test(body.customer_id)) {
+      sessionInsert.customer_id = body.customer_id
+    }
+    if (body.intent) {
+      sessionInsert.intent = body.intent
+    }
+
     const { data: newSession, error: sessionError } = await supabase
       .from('chat_sessions')
-      .insert({ business_id: businessId })
+      .insert(sessionInsert)
       .select('id')
       .single()
 
