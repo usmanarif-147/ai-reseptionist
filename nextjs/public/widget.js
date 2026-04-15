@@ -7,12 +7,18 @@
 
   var API_BASE = script.src.replace('/widget.js', '');
   var primaryColor = '#2563eb';
-  var sessionId = sessionStorage.getItem('ai-widget-session-' + businessId) || null;
+  var sessionId = localStorage.getItem('ai-widget-session-' + businessId) || null;
   var intentKey = 'ai-widget-intent-' + businessId;
   var lastIntentKey = 'ai-widget-last-intent-' + businessId;
   var tooltipDismissedKey = 'ai-widget-tooltip-dismissed-' + businessId;
   var lastMsgTimeKey = 'ai-widget-last-msg-' + businessId;
   var currentIntent = null; // never pre-loaded — only set after intent selection
+  var sessionEnded = false;
+  var sessionEndReason = null; // 'ended' or 'expired'
+
+  // --- Inactivity timer ---
+  var inactivityTimer = null;
+  var INACTIVITY_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 
   // --- Visitor ID ---
   var visitorKey = 'ai-widget-visitor-' + businessId;
@@ -188,7 +194,7 @@
 
   // --- 10-minute resume check ---
   function canResumeSession() {
-    var lastMsgTime = sessionStorage.getItem(lastMsgTimeKey);
+    var lastMsgTime = localStorage.getItem(lastMsgTimeKey);
     return sessionId && lastMsgTime && (Date.now() - parseInt(lastMsgTime)) < 10 * 60 * 1000;
   }
 
@@ -393,6 +399,8 @@
       addMessage('bot', welcomeMessage);
       welcomeShown = true;
     }
+    // Start inactivity timer when chat opens
+    startInactivityTimer();
     // Dismiss tooltip when chat opens
     var tipEl = document.getElementById('ai-widget-tooltip');
     if (tipEl) {
@@ -444,7 +452,7 @@
   // --- SSE chat ---
   function sendMessage(text) {
     var userMsg = text.trim();
-    if (!userMsg) return;
+    if (!userMsg || sessionEnded) return;
 
     addMessage('user', userMsg);
     var botBubble = addMessage('bot', '');
@@ -483,13 +491,27 @@
                 var data = JSON.parse(line.slice(6));
                 if (data.type === 'session') {
                   sessionId = data.session_id;
-                  sessionStorage.setItem('ai-widget-session-' + businessId, sessionId);
+                  localStorage.setItem('ai-widget-session-' + businessId, sessionId);
                 } else if (data.type === 'token') {
-                  botBubble.textContent += data.token;
-                  scrollToBottom();
+                  var cleanToken = data.token.replace(/\s*\[END_CONVERSATION\]\s*/g, '');
+                  if (cleanToken) {
+                    botBubble.textContent += cleanToken;
+                    scrollToBottom();
+                  }
+                } else if (data.type === 'end_conversation') {
+                  // AI has detected end of conversation — strip any [END_CONVERSATION] marker
+                  // that leaked into the bubble (marker may span multiple tokens)
+                  if (botBubble) {
+                    botBubble.textContent = botBubble.textContent.replace(/\s*\[END_CONVERSATION\]\s*/g, '').trim();
+                  }
+                  localStorage.setItem(lastMsgTimeKey, Date.now().toString());
+                  setTimeout(function() {
+                    transitionToEndingState('ended');
+                  }, 500);
                 } else if (data.type === 'done') {
                   // Record last message time for 10-minute resume
-                  sessionStorage.setItem(lastMsgTimeKey, Date.now().toString());
+                  localStorage.setItem(lastMsgTimeKey, Date.now().toString());
+                  resetInactivityTimer();
                   setInputDisabled(false);
                 }
               } catch(e) { /* ignore malformed SSE data */ }
@@ -508,14 +530,254 @@
     });
   }
 
+  // --- Inactivity timer functions ---
+  function startInactivityTimer() {
+    stopInactivityTimer();
+    inactivityTimer = setTimeout(function() {
+      endSessionDueToInactivity();
+    }, INACTIVITY_TIMEOUT);
+  }
+
+  function resetInactivityTimer() {
+    if (inactivityTimer) {
+      clearTimeout(inactivityTimer);
+    }
+    startInactivityTimer();
+  }
+
+  function stopInactivityTimer() {
+    if (inactivityTimer) {
+      clearTimeout(inactivityTimer);
+      inactivityTimer = null;
+    }
+  }
+
+  function endSessionDueToInactivity() {
+    // Mark session as expired in the DB immediately (fire-and-forget)
+    fetch(API_BASE + '/api/widget/' + businessId + '/session/end', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: sessionId,
+        status: 'expired',
+        feedback_rating: null,
+        feedback_note: null
+      })
+    }).catch(function() {});
+    addMessage('bot', 'This conversation has been automatically closed due to inactivity. Feel free to start a new conversation anytime.');
+    transitionToEndingState('expired');
+  }
+
+  // --- Session ending state ---
+  function transitionToEndingState(reason) {
+    sessionEnded = true;
+    sessionEndReason = reason;
+    stopInactivityTimer();
+    setInputDisabled(true);
+    document.getElementById('ai-widget-input-row').style.display = 'none';
+    setTimeout(function() {
+      showFeedbackPrompt(reason);
+    }, reason === 'expired' ? 1000 : 500);
+  }
+
+  function showFeedbackPrompt(reason) {
+    var feedbackEl = document.createElement('div');
+    feedbackEl.id = 'ai-widget-feedback';
+    feedbackEl.style.cssText = 'padding: 20px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;';
+
+    var feedbackTitle = document.createElement('div');
+    feedbackTitle.style.cssText = 'font-size: 15px; font-weight: 700; color: #1f2937; text-align: center;';
+    feedbackTitle.textContent = 'How was your experience?';
+
+    var starsContainer = document.createElement('div');
+    starsContainer.style.cssText = 'display: flex; gap: 12px; justify-content: center;';
+
+    var selectedRating = 0;
+
+    for (var i = 1; i <= 5; i++) {
+      (function(star) {
+        var starBtn = document.createElement('button');
+        starBtn.style.cssText = 'background: none; border: none; font-size: 32px; cursor: pointer; color: #d1d5db; transition: color 0.15s; padding: 0;';
+        starBtn.textContent = '\u2605';
+        starBtn.setAttribute('data-star', star);
+
+        starBtn.addEventListener('mouseover', function() {
+          var allStars = starsContainer.querySelectorAll('button');
+          allStars.forEach(function(s) {
+            s.style.color = parseInt(s.getAttribute('data-star')) <= star ? primaryColor : '#d1d5db';
+          });
+        });
+
+        starBtn.addEventListener('mouseout', function() {
+          var allStars = starsContainer.querySelectorAll('button');
+          allStars.forEach(function(s) {
+            s.style.color = parseInt(s.getAttribute('data-star')) <= selectedRating ? primaryColor : '#d1d5db';
+          });
+        });
+
+        starBtn.addEventListener('click', function() {
+          selectedRating = star;
+          var allStars = starsContainer.querySelectorAll('button');
+          allStars.forEach(function(s) {
+            s.style.color = parseInt(s.getAttribute('data-star')) <= selectedRating ? primaryColor : '#d1d5db';
+          });
+        });
+
+        starsContainer.appendChild(starBtn);
+      })(i);
+    }
+
+    var noteField = document.createElement('textarea');
+    noteField.id = 'ai-widget-feedback-note';
+    noteField.placeholder = 'Leave a message for the business (optional)';
+    noteField.style.cssText = 'width: 100%; border: 1.5px solid #e5e7eb; border-radius: 8px; padding: 9px 12px; font-size: 13.5px; font-family: inherit; outline: none; resize: none; height: 80px; background: #f9fafb; box-sizing: border-box;';
+
+    var buttonContainer = document.createElement('div');
+    buttonContainer.style.cssText = 'display: flex; gap: 8px;';
+
+    var submitFeedbackBtn = document.createElement('button');
+    submitFeedbackBtn.textContent = 'Submit Feedback';
+    submitFeedbackBtn.style.cssText = 'flex: 1; padding: 12px 16px; border: none; border-radius: 8px; background: ' + primaryColor + '; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; transition: opacity 0.15s;';
+
+    submitFeedbackBtn.addEventListener('click', function() {
+      var feedbackNote = noteField.value.trim();
+      submitFeedbackBtn.disabled = true;
+      submitFeedbackBtn.textContent = 'Submitting...';
+
+      fetch(API_BASE + '/api/widget/' + businessId + '/session/end', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          status: sessionEndReason || 'ended',
+          feedback_rating: selectedRating > 0 ? selectedRating : null,
+          feedback_note: feedbackNote || null
+        })
+      })
+        .then(function() { showEndingMessage(); })
+        .catch(function() { showEndingMessage(); });
+    });
+
+    var skipBtn = document.createElement('button');
+    skipBtn.textContent = 'Skip';
+    skipBtn.style.cssText = 'padding: 12px 16px; border: 1.5px solid #e5e7eb; border-radius: 8px; background: #fff; color: #374151; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; transition: opacity 0.15s;';
+
+    skipBtn.addEventListener('click', function() {
+      fetch(API_BASE + '/api/widget/' + businessId + '/session/end', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          status: sessionEndReason || 'ended',
+          feedback_rating: null,
+          feedback_note: null
+        })
+      })
+        .then(function() { showEndingMessage(); })
+        .catch(function() { showEndingMessage(); });
+    });
+
+    buttonContainer.appendChild(submitFeedbackBtn);
+    buttonContainer.appendChild(skipBtn);
+
+    feedbackEl.appendChild(feedbackTitle);
+    feedbackEl.appendChild(starsContainer);
+    feedbackEl.appendChild(noteField);
+    feedbackEl.appendChild(buttonContainer);
+
+    // Append feedback form below the messages area
+    messagesEl.appendChild(feedbackEl);
+    scrollToBottom();
+  }
+
+  function showEndingMessage() {
+    // Remove feedback form
+    var feedbackEl = document.getElementById('ai-widget-feedback');
+    if (feedbackEl) feedbackEl.remove();
+
+    // Show thank you message in chat
+    addMessage('bot', 'Thank you for your feedback. Have a great day!');
+
+    // Add "Start New Conversation" button
+    var newConvRow = document.createElement('div');
+    newConvRow.id = 'ai-widget-new-conv';
+    newConvRow.style.cssText = 'padding: 12px 14px; text-align: center;';
+
+    var newConvBtn = document.createElement('button');
+    newConvBtn.textContent = 'Start New Conversation';
+    newConvBtn.style.cssText = 'padding: 12px 20px; border: none; border-radius: 8px; background: ' + primaryColor + '; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; transition: opacity 0.15s;';
+
+    newConvBtn.addEventListener('click', function() {
+      startNewConversation();
+    });
+
+    newConvRow.appendChild(newConvBtn);
+    messagesEl.appendChild(newConvRow);
+    scrollToBottom();
+  }
+
+  function startNewConversation() {
+    // Clear session data (keep email and visitor ID)
+    sessionId = null;
+    sessionEnded = false;
+    sessionEndReason = null;
+    currentIntent = null;
+    welcomeShown = false;
+    localStorage.removeItem('ai-widget-session-' + businessId);
+    localStorage.removeItem(lastMsgTimeKey);
+
+    // Clear chat messages
+    messagesEl.innerHTML = '';
+
+    // Remove any ending UI
+    var newConvEl = document.getElementById('ai-widget-new-conv');
+    if (newConvEl) newConvEl.remove();
+
+    // Re-enable and show input row
+    document.getElementById('ai-widget-input-row').style.display = 'flex';
+    setInputDisabled(false);
+    inputEl.placeholder = 'Type a message...';
+
+    // Show intent selection (skip form — email already in localStorage)
+    if (storedEmail) {
+      showIntentSelection(true);
+    } else {
+      showIntentSelection(false);
+    }
+  }
+
+  // --- Visibility change handler ---
+  document.addEventListener('visibilitychange', function() {
+    if (document.hidden) {
+      // Page hidden — pause inactivity timer
+      stopInactivityTimer();
+    } else {
+      // Page visible again — resume timer if widget is open and session is active
+      if (popup.style.display !== 'none' && sessionId && !sessionEnded) {
+        startInactivityTimer();
+      }
+    }
+  });
+
   // --- Event wiring ---
   btn.addEventListener('click', function() {
     var isOpen = popup.style.display !== 'none';
     popup.style.display = isOpen ? 'none' : 'flex';
     if (!isOpen) {
-      if (sessionId) {
-        // Active session in progress — continue conversation
+      if (sessionId && canResumeSession()) {
+        // Within 10 minutes — continue conversation
+        startInactivityTimer();
         inputEl.focus();
+      } else if (sessionId && !canResumeSession()) {
+        // After 10 minutes — session expired, clear it
+        sessionId = null;
+        localStorage.removeItem('ai-widget-session-' + businessId);
+        localStorage.removeItem(lastMsgTimeKey);
+        if (storedEmail) {
+          showIntentSelection(true);
+        } else {
+          showIntentSelection(false);
+        }
       } else if (storedEmail) {
         // Returning visitor without active session — show intent (form skipped)
         showIntentSelection(true);
@@ -523,11 +785,15 @@
         // New visitor — show intent (form required)
         showIntentSelection(false);
       }
+    } else {
+      // Widget closing — stop inactivity timer
+      stopInactivityTimer();
     }
   });
 
   closeBtn.addEventListener('click', function() {
     popup.style.display = 'none';
+    stopInactivityTimer();
     // If no active session, discard incomplete intent/form flow so next open starts fresh
     if (!sessionId) {
       currentIntent = null;

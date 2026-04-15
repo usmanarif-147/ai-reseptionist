@@ -86,6 +86,11 @@ interface BusinessInfo {
   type?: string | null
 }
 
+export interface CustomerData {
+  name?: string | null
+  email?: string | null
+}
+
 export function buildSystemPrompt(
   businessName: string,
   services: Service[],
@@ -96,7 +101,8 @@ export function buildSystemPrompt(
   staffHours: StaffHour[] = [],
   visibilitySettings?: VisibilitySettings,
   businessInfo?: BusinessInfo,
-  intent?: string
+  intent?: string,
+  customerData?: CustomerData
 ): string {
   const vs = visibilitySettings
 
@@ -302,11 +308,32 @@ export function buildSystemPrompt(
     }
   }
 
+  // Returning customer greeting
+  if (customerData) {
+    lines.push('CUSTOMER GREETING:')
+    if (customerData.name) {
+      lines.push(`Greet this customer by name — "Welcome back, ${customerData.name}!"`)
+    } else if (customerData.email) {
+      lines.push('Greet warmly without name — "Welcome back! Great to hear from you again."')
+    }
+    lines.push('')
+  }
+
   // Non-configurable rules — always appended
   lines.push('IMPORTANT RULES (always enforce, non-negotiable):')
   lines.push('- Refund requests: Never handle them. Always redirect customer to contact the business directly.')
   lines.push('- Appointment booking: Never collect booking details in chat. Share the booking link only and direct the customer to book there.')
   lines.push('- Appointment lookup: Customers must provide their 8-digit appointment number for you to look up their appointment.')
+  lines.push('')
+
+  // Scope guard
+  lines.push('SCOPE GUARD:')
+  lines.push(`Only answer questions directly related to ${displayName} and its services. If the customer asks about anything unrelated, respond politely: "I can only help with questions about ${displayName}. For other topics, please use a general search engine or contact us directly."`)
+  lines.push('')
+
+  // Closing phrase detection
+  lines.push('CONVERSATION ENDING:')
+  lines.push('If the customer uses closing phrases such as "thank you", "bye", "that\'s all", "I\'m done", or similar signals they are finished — do NOT end immediately. Respond: "You\'re welcome! Is there anything else I can help you with, or shall we wrap up?" Wait for their response. If they confirm done (e.g. "no that\'s all", "yes wrap up"), reply: "Thank you for chatting with us. Have a great day! [END_CONVERSATION]". If they want to continue, proceed normally.')
   lines.push('')
 
   return lines.join('\n')
