@@ -34,13 +34,13 @@ export default async function SubscriptionPage({
       .eq('user_id', user.id)
       .single()
 
-    if (!sub) redirect(`/${businessId}/dashboard/subscription`)
+    if (!sub) redirect(`/${businessId}/subscription`)
 
     await stripe.subscriptions.update(sub.stripe_subscription_id, {
       cancel_at_period_end: true,
     })
 
-    redirect(`/${businessId}/dashboard/subscription?scheduled=1`)
+    redirect(`/${businessId}/subscription?scheduled=1`)
   }
 
   const statusColor: Record<string, string> = {

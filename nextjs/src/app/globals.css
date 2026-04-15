@@ -1,3 +1,63 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* SweetAlert2 custom styles — matches dashboard theme */
+.swal-popup {
+  border-radius: 0.75rem !important;
+  border: 1px solid rgb(243 244 246) !important;
+  padding: 1.5rem !important;
+  font-family: inherit !important;
+}
+
+.swal-title {
+  font-size: 1rem !important;
+  font-weight: 600 !important;
+  color: rgb(17 24 39) !important;
+}
+
+.swal-text {
+  font-size: 0.875rem !important;
+  color: rgb(107 114 128) !important;
+}
+
+.swal-confirm {
+  background-color: rgb(37 99 235) !important;
+  color: white !important;
+  padding: 0.5rem 1.25rem !important;
+  border-radius: 0.5rem !important;
+  font-size: 0.875rem !important;
+  font-weight: 500 !important;
+  margin-left: 0.75rem !important;
+  transition: background-color 0.15s !important;
+}
+.swal-confirm:hover {
+  background-color: rgb(29 78 216) !important;
+}
+
+.swal-confirm-danger {
+  background-color: rgb(220 38 38) !important;
+  color: white !important;
+  padding: 0.5rem 1.25rem !important;
+  border-radius: 0.5rem !important;
+  font-size: 0.875rem !important;
+  font-weight: 500 !important;
+  margin-left: 0.75rem !important;
+  transition: background-color 0.15s !important;
+}
+.swal-confirm-danger:hover {
+  background-color: rgb(185 28 28) !important;
+}
+
+.swal-cancel {
+  color: rgb(75 85 99) !important;
+  padding: 0.5rem 1.25rem !important;
+  border-radius: 0.5rem !important;
+  font-size: 0.875rem !important;
+  font-weight: 500 !important;
+  background-color: transparent !important;
+  transition: background-color 0.15s !important;
+}
+.swal-cancel:hover {
+  background-color: rgb(243 244 246) !important;
+}

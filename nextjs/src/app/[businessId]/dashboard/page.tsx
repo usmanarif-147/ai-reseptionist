@@ -105,15 +105,16 @@ export default function OverviewPage() {
     return <LoadingSkeleton />
   }
 
-  const basePath = `/${businessId}/dashboard`
+  const dashboardPath = `/${businessId}/dashboard`
+  const businessBasePath = `/${businessId}`
 
   const checklist = [
     { done: !!business?.name && !!business?.type, label: 'Complete your business profile', href: '' },
     { done: setup?.hasServices ?? false, label: 'Add your services and pricing', href: '/services' },
-    { done: setup?.hasHours ?? false, label: 'Set your business hours', href: '/hours' },
+    { done: setup?.hasHours ?? false, label: 'Set your business hours', href: '/business-hours' },
     { done: setup?.hasStaff ?? false, label: 'Add your staff members', href: '/staff' },
     { done: setup?.hasPayments ?? false, label: 'Configure payment settings', href: '/payments' },
-    { done: setup?.hasWidget ?? false, label: 'Customize and copy your widget code', href: '/widget' },
+    { done: setup?.hasWidget ?? false, label: 'Customize and copy your widget settings', href: '/widget-settings' },
   ]
 
   const completedCount = checklist.filter((c) => c.done).length
@@ -254,7 +255,7 @@ export default function OverviewPage() {
         <ul className="space-y-3 text-sm text-blue-800">
           {checklist.map((item, i) => (
             <li key={i}>
-              <Link href={`${basePath}${item.href}`} className="flex items-center gap-3 hover:text-blue-900">
+              <Link href={item.href === '' ? dashboardPath : `${businessBasePath}${item.href}`} className="flex items-center gap-3 hover:text-blue-900">
                 {item.done ? (
                   <svg className="w-5 h-5 text-green-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />

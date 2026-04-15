@@ -4,14 +4,29 @@ import { NextResponse, type NextRequest } from 'next/server'
 // UUID v4 pattern
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
+// Sub-pages that live directly under /{businessId}/ (outside /dashboard/)
+const BUSINESS_SUB_PAGES = new Set([
+  'services',
+  'business-hours',
+  'staff',
+  'appointments',
+  'customers',
+  'widget-settings',
+  'widget-stats',
+  'payments',
+  'subscription',
+])
+
 function isBusinessDashboardRoute(pathname: string) {
   const segments = pathname.split('/').filter(Boolean)
-  return segments.length >= 2 && UUID_REGEX.test(segments[0]) && segments[1] === 'dashboard'
+  if (segments.length < 2 || !UUID_REGEX.test(segments[0])) return false
+  return segments[1] === 'dashboard' || BUSINESS_SUB_PAGES.has(segments[1])
 }
 
 function getBusinessIdFromPath(pathname: string): string | null {
   const segments = pathname.split('/').filter(Boolean)
-  if (segments.length >= 2 && UUID_REGEX.test(segments[0]) && segments[1] === 'dashboard') {
+  if (segments.length < 2 || !UUID_REGEX.test(segments[0])) return null
+  if (segments[1] === 'dashboard' || BUSINESS_SUB_PAGES.has(segments[1])) {
     return segments[0]
   }
   return null
@@ -87,9 +102,14 @@ export async function middleware(request: NextRequest) {
       .single()
 
     if (business) {
-      // Preserve the rest of the path (e.g. /dashboard/subscription → /{id}/dashboard/subscription)
+      // Preserve the rest of the path (e.g. /dashboard/subscription → /{id}/subscription)
       const rest = pathname.replace(/^\/dashboard/, '')
-      return NextResponse.redirect(new URL(`/${business.id}/dashboard${rest}`, request.url))
+      // Map old /dashboard/hours to new /business-hours
+      const mappedRest = rest === '/hours' ? '/business-hours' : rest === '/widget' ? '/widget-settings' : rest
+      if (mappedRest === '') {
+        return NextResponse.redirect(new URL(`/${business.id}/dashboard`, request.url))
+      }
+      return NextResponse.redirect(new URL(`/${business.id}${mappedRest}`, request.url))
     }
     // No business yet — let them through to the old dashboard which will prompt setup
   }
@@ -147,5 +167,14 @@ export const config = {
     '/subscribe/:path*',
     '/:businessId/dashboard',
     '/:businessId/dashboard/:path*',
+    '/:businessId/services',
+    '/:businessId/business-hours',
+    '/:businessId/staff',
+    '/:businessId/appointments',
+    '/:businessId/customers',
+    '/:businessId/widget-settings',
+    '/:businessId/widget-stats',
+    '/:businessId/payments',
+    '/:businessId/subscription',
   ],
 }
