@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { type AppearanceSettings, type VisibilityMode, DEFAULT_APPEARANCE } from './components/shared'
 import AppearanceSidebar, { type AppearanceCategory } from './components/AppearanceSidebar'
+import InfoControlSidebar, { type InfoCategory } from './components/InfoControlSidebar'
 import GeneralSection from './components/sections/GeneralSection'
 import TooltipSection from './components/sections/TooltipSection'
 import IntentSection from './components/sections/IntentSection'
@@ -13,8 +14,12 @@ import TypingSection from './components/sections/TypingSection'
 import SessionEndedSection from './components/sections/SessionEndedSection'
 import SessionExpiredSection from './components/sections/SessionExpiredSection'
 import FeedbackSection from './components/sections/FeedbackSection'
+import BusinessDetailsSection from './components/info-sections/BusinessDetailsSection'
+import BusinessHoursSection from './components/info-sections/BusinessHoursSection'
+import ServicesSection from './components/info-sections/ServicesSection'
+import StaffSection from './components/info-sections/StaffSection'
+import AppointmentsSection from './components/info-sections/AppointmentsSection'
 import WidgetPreview from './components/WidgetPreview'
-import InformationControlTab from './components/InformationControlTab'
 
 interface TabDefinition {
   id: string
@@ -52,32 +57,6 @@ function TabBar({ tabs, activeTab, onTabChange }: {
   )
 }
 
-function Modal({ title, subtitle, onClose, children }: {
-  title: string
-  subtitle: string
-  onClose: () => void
-  children: React.ReactNode
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-white rounded-xl shadow-xl border border-gray-100 p-6 w-full max-w-md mx-4 max-h-[80vh] overflow-y-auto">
-        <h3 className="text-base font-semibold text-gray-900 mb-1">{title}</h3>
-        <p className="text-sm text-gray-500 mb-5">{subtitle}</p>
-        {children}
-        <div className="flex justify-end mt-6">
-          <button
-            onClick={onClose}
-            className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-blue-700"
-          >
-            Done
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 const SECTION_COMPONENTS: Record<AppearanceCategory, React.ComponentType<{ appearance: AppearanceSettings; updateAppearance: <K extends keyof AppearanceSettings>(key: K, value: AppearanceSettings[K]) => void }>> = {
   general: GeneralSection,
   tooltip: TooltipSection,
@@ -94,6 +73,7 @@ export default function WidgetPage() {
   const { businessId } = useParams<{ businessId: string }>()
   const [activeTab, setActiveTab] = useState('appearance')
   const [activeSection, setActiveSection] = useState<AppearanceCategory>('general')
+  const [activeInfoSection, setActiveInfoSection] = useState<InfoCategory>('business-details')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -120,11 +100,6 @@ export default function WidgetPage() {
   const [showAppointmentPaymentType, setShowAppointmentPaymentType] = useState(false)
   const [showAppointmentPaymentStatus, setShowAppointmentPaymentStatus] = useState(false)
   const [showAppointmentNotes, setShowAppointmentNotes] = useState(false)
-
-  // Modal state
-  const [activeModal, setActiveModal] = useState<string | null>(null)
-  const [serviceSearch, setServiceSearch] = useState('')
-  const [staffSearch, setStaffSearch] = useState('')
 
   // Data for hide-specific lists
   const [allServices, setAllServices] = useState<Array<{id: string, name: string, is_active: boolean}>>([])
@@ -266,32 +241,6 @@ export default function WidgetPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const businessDetailsCount = [showBusinessName, showContact, showAddress, showBusinessType].filter(Boolean).length
-  const appointmentCount = [
-    showAppointmentService, showAppointmentStaff, showAppointmentDatetime,
-    showAppointmentDuration, showAppointmentPaymentType, showAppointmentPaymentStatus,
-    showAppointmentNotes,
-  ].filter(Boolean).length
-
-  function servicesStatusLabel(): string {
-    if (servicesVisibility === 'all') return 'All'
-    if (servicesVisibility === 'hide_specific') return `${hiddenServiceIds.length} hidden`
-    return 'Active only'
-  }
-
-  function staffStatusLabel(): string {
-    if (staffVisibility === 'all') return 'All'
-    if (staffVisibility === 'hide_specific') return `${hiddenStaffIds.length} hidden`
-    return 'Active only'
-  }
-
-  const filteredServices = allServices.filter((s) =>
-    s.name.toLowerCase().includes(serviceSearch.toLowerCase())
-  )
-  const filteredStaff = allStaff.filter((s) =>
-    s.name.toLowerCase().includes(staffSearch.toLowerCase())
-  )
-
   if (loading) return <LoadingSkeleton />
 
   const ActiveSectionComponent = SECTION_COMPONENTS[activeSection]
@@ -369,18 +318,84 @@ export default function WidgetPage() {
           )}
 
           {activeTab === 'information' && (
-            <div className="p-6">
-              <InformationControlTab
-                businessDetailsCount={businessDetailsCount}
-                showBusinessHours={showBusinessHours}
-                setShowBusinessHours={setShowBusinessHours}
-                servicesStatusLabel={servicesStatusLabel()}
-                staffStatusLabel={staffStatusLabel()}
-                appointmentCount={appointmentCount}
-                setActiveModal={setActiveModal}
-                saving={saving}
-                onSave={saveSettings}
-              />
+            <div className="flex">
+              {/* Sidebar */}
+              <div className="py-4 pl-4">
+                <InfoControlSidebar activeSection={activeInfoSection} onSelect={setActiveInfoSection} />
+              </div>
+
+              {/* Active section content */}
+              <div className="flex-1 p-6 min-w-0">
+                {activeInfoSection === 'business-details' && (
+                  <BusinessDetailsSection
+                    showBusinessName={showBusinessName}
+                    setShowBusinessName={setShowBusinessName}
+                    showContact={showContact}
+                    setShowContact={setShowContact}
+                    showAddress={showAddress}
+                    setShowAddress={setShowAddress}
+                    showBusinessType={showBusinessType}
+                    setShowBusinessType={setShowBusinessType}
+                  />
+                )}
+
+                {activeInfoSection === 'business-hours' && (
+                  <BusinessHoursSection
+                    showBusinessHours={showBusinessHours}
+                    setShowBusinessHours={setShowBusinessHours}
+                  />
+                )}
+
+                {activeInfoSection === 'services' && (
+                  <ServicesSection
+                    servicesVisibility={servicesVisibility}
+                    setServicesVisibility={setServicesVisibility}
+                    hiddenServiceIds={hiddenServiceIds}
+                    setHiddenServiceIds={setHiddenServiceIds}
+                    allServices={allServices}
+                  />
+                )}
+
+                {activeInfoSection === 'staff' && (
+                  <StaffSection
+                    staffVisibility={staffVisibility}
+                    setStaffVisibility={setStaffVisibility}
+                    hiddenStaffIds={hiddenStaffIds}
+                    setHiddenStaffIds={setHiddenStaffIds}
+                    allStaff={allStaff}
+                  />
+                )}
+
+                {activeInfoSection === 'appointments' && (
+                  <AppointmentsSection
+                    showAppointmentService={showAppointmentService}
+                    setShowAppointmentService={setShowAppointmentService}
+                    showAppointmentStaff={showAppointmentStaff}
+                    setShowAppointmentStaff={setShowAppointmentStaff}
+                    showAppointmentDatetime={showAppointmentDatetime}
+                    setShowAppointmentDatetime={setShowAppointmentDatetime}
+                    showAppointmentDuration={showAppointmentDuration}
+                    setShowAppointmentDuration={setShowAppointmentDuration}
+                    showAppointmentPaymentType={showAppointmentPaymentType}
+                    setShowAppointmentPaymentType={setShowAppointmentPaymentType}
+                    showAppointmentPaymentStatus={showAppointmentPaymentStatus}
+                    setShowAppointmentPaymentStatus={setShowAppointmentPaymentStatus}
+                    showAppointmentNotes={showAppointmentNotes}
+                    setShowAppointmentNotes={setShowAppointmentNotes}
+                  />
+                )}
+
+                <div className="mt-8">
+                  <button
+                    type="button"
+                    onClick={saveSettings}
+                    disabled={saving}
+                    className="bg-blue-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {saving ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -393,192 +408,6 @@ export default function WidgetPage() {
           </div>
         </div>
       </div>
-
-      {/* Modals */}
-      {activeModal === 'business-details' && (
-        <Modal
-          title="Business Details Visibility"
-          subtitle="Choose which business information the AI can share with customers."
-          onClose={() => setActiveModal(null)}
-        >
-          <div className="space-y-3">
-            {([
-              ['Show Business Name', showBusinessName, setShowBusinessName],
-              ['Show Contact Information (phone, email)', showContact, setShowContact],
-              ['Show Address', showAddress, setShowAddress],
-              ['Show Business Type', showBusinessType, setShowBusinessType],
-            ] as const).map(([label, value, setter]) => (
-              <label key={label} className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={value}
-                  onChange={(e) => (setter as (v: boolean) => void)(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 text-blue-600"
-                />
-                <span className="text-sm text-gray-700">{label}</span>
-              </label>
-            ))}
-          </div>
-        </Modal>
-      )}
-
-      {activeModal === 'services' && (
-        <Modal
-          title="Services Visibility"
-          subtitle="Control which services the AI can discuss with customers."
-          onClose={() => { setActiveModal(null); setServiceSearch('') }}
-        >
-          <div className="space-y-3">
-            {([
-              ['active_only', 'Active services only (default)'],
-              ['all', 'All services (including inactive)'],
-              ['hide_specific', 'Hide specific services'],
-            ] as const).map(([val, label]) => (
-              <label key={val} className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="radio"
-                  name="services_visibility"
-                  checked={servicesVisibility === val}
-                  onChange={() => setServicesVisibility(val)}
-                  className="w-4 h-4 border-gray-300 text-blue-600"
-                />
-                <span className="text-sm text-gray-700">{label}</span>
-              </label>
-            ))}
-          </div>
-
-          {servicesVisibility === 'hide_specific' && (
-            <div className="mt-4">
-              <input
-                type="text"
-                value={serviceSearch}
-                onChange={(e) => setServiceSearch(e.target.value)}
-                placeholder="Search services..."
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
-              />
-              {filteredServices.length === 0 ? (
-                <p className="text-sm text-gray-400">No services found.</p>
-              ) : (
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {filteredServices.map((s) => (
-                    <label key={s.id} className="flex items-center gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={hiddenServiceIds.includes(s.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) setHiddenServiceIds([...hiddenServiceIds, s.id])
-                          else setHiddenServiceIds(hiddenServiceIds.filter((id) => id !== s.id))
-                        }}
-                        className="w-4 h-4 rounded border-gray-300 text-blue-600"
-                      />
-                      <span className="text-sm text-gray-700">
-                        {s.name}
-                        {!s.is_active && (
-                          <span className="ml-1.5 text-xs text-gray-400">(inactive)</span>
-                        )}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </Modal>
-      )}
-
-      {activeModal === 'staff' && (
-        <Modal
-          title="Staff Visibility"
-          subtitle="Control which staff members the AI can mention to customers."
-          onClose={() => { setActiveModal(null); setStaffSearch('') }}
-        >
-          <div className="space-y-3">
-            {([
-              ['active_only', 'Active staff only (default)'],
-              ['all', 'All staff (including inactive)'],
-              ['hide_specific', 'Hide specific staff members'],
-            ] as const).map(([val, label]) => (
-              <label key={val} className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="radio"
-                  name="staff_visibility"
-                  checked={staffVisibility === val}
-                  onChange={() => setStaffVisibility(val)}
-                  className="w-4 h-4 border-gray-300 text-blue-600"
-                />
-                <span className="text-sm text-gray-700">{label}</span>
-              </label>
-            ))}
-          </div>
-
-          {staffVisibility === 'hide_specific' && (
-            <div className="mt-4">
-              <input
-                type="text"
-                value={staffSearch}
-                onChange={(e) => setStaffSearch(e.target.value)}
-                placeholder="Search staff..."
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
-              />
-              {filteredStaff.length === 0 ? (
-                <p className="text-sm text-gray-400">No staff found.</p>
-              ) : (
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {filteredStaff.map((s) => (
-                    <label key={s.id} className="flex items-center gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={hiddenStaffIds.includes(s.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) setHiddenStaffIds([...hiddenStaffIds, s.id])
-                          else setHiddenStaffIds(hiddenStaffIds.filter((id) => id !== s.id))
-                        }}
-                        className="w-4 h-4 rounded border-gray-300 text-blue-600"
-                      />
-                      <span className="text-sm text-gray-700">
-                        {s.name}
-                        {!s.is_active && (
-                          <span className="ml-1.5 text-xs text-gray-400">(inactive)</span>
-                        )}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </Modal>
-      )}
-
-      {activeModal === 'appointments' && (
-        <Modal
-          title="Appointment Details Visibility"
-          subtitle="When a customer looks up their appointment, choose what details the AI can share."
-          onClose={() => setActiveModal(null)}
-        >
-          <div className="space-y-3">
-            {([
-              ['Service name', showAppointmentService, setShowAppointmentService],
-              ['Staff member', showAppointmentStaff, setShowAppointmentStaff],
-              ['Date & time', showAppointmentDatetime, setShowAppointmentDatetime],
-              ['Duration', showAppointmentDuration, setShowAppointmentDuration],
-              ['Payment type', showAppointmentPaymentType, setShowAppointmentPaymentType],
-              ['Payment status', showAppointmentPaymentStatus, setShowAppointmentPaymentStatus],
-              ['Notes', showAppointmentNotes, setShowAppointmentNotes],
-            ] as const).map(([label, value, setter]) => (
-              <label key={label} className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={value}
-                  onChange={(e) => (setter as (v: boolean) => void)(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 text-blue-600"
-                />
-                <span className="text-sm text-gray-700">{label}</span>
-              </label>
-            ))}
-          </div>
-        </Modal>
-      )}
     </div>
   )
 }
