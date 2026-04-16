@@ -13,6 +13,9 @@ export async function GET(request: NextRequest) {
 
   const searchFilter = request.nextUrl.searchParams.get('search')
   const typeFilter = request.nextUrl.searchParams.get('type')
+  const pageParam = request.nextUrl.searchParams.get('page')
+  const pageSizeParam = request.nextUrl.searchParams.get('pageSize')
+  // Legacy params kept for backwards compat
   const limitParam = request.nextUrl.searchParams.get('limit')
   const offsetParam = request.nextUrl.searchParams.get('offset')
 
@@ -78,7 +81,16 @@ export async function GET(request: NextRequest) {
   }
 
   const total = filtered.length
-  const paginated = filtered.slice(offset, offset + limit)
+
+  let paginated: typeof filtered
+  if (pageParam) {
+    const page = Math.max(parseInt(pageParam, 10) || 1, 1)
+    const pageSize = Math.min(Math.max(parseInt(pageSizeParam || '10', 10) || 10, 1), 100)
+    const from = (page - 1) * pageSize
+    paginated = filtered.slice(from, from + pageSize)
+  } else {
+    paginated = filtered.slice(offset, offset + limit)
+  }
 
   return NextResponse.json({ total, customers: paginated })
 }

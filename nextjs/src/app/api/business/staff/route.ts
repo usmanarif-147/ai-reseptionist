@@ -13,10 +13,14 @@ export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl
   const search = searchParams.get('search')
   const role = searchParams.get('role')
+  const status = searchParams.get('status')
+
+  const pageParam = searchParams.get('page')
+  const pageSizeParam = searchParams.get('pageSize')
 
   let query = supabase
     .from('staff')
-    .select('*')
+    .select('*', { count: 'exact' })
     .eq('business_id', business.id)
 
   if (search) {
@@ -25,11 +29,29 @@ export async function GET(request: NextRequest) {
   if (role) {
     query = query.eq('role', role)
   }
+  if (status === 'active') {
+    query = query.eq('is_active', true)
+  } else if (status === 'inactive') {
+    query = query.eq('is_active', false)
+  }
 
-  const { data: staff, error } = await query.order('created_at', { ascending: true })
+  query = query.order('created_at', { ascending: true })
+
+  if (pageParam) {
+    const page = Math.max(parseInt(pageParam, 10) || 1, 1)
+    const pageSize = Math.min(Math.max(parseInt(pageSizeParam || '10', 10) || 10, 1), 100)
+    const from = (page - 1) * pageSize
+    query = query.range(from, from + pageSize - 1)
+  }
+
+  const { data: staff, error, count } = await query
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  if (pageParam) {
+    return NextResponse.json({ data: staff, total: count ?? 0 })
   }
 
   return NextResponse.json(staff)

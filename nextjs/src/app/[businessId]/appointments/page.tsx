@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import { TableView, ListView, ViewToggle, Modal } from '@/components/dashboard'
-import type { ColumnDef, FilterDef } from '@/components/dashboard'
+import type { ColumnDef, FilterDef, PaginationInfo } from '@/components/dashboard'
 
 interface Service {
   id: string
@@ -58,9 +58,12 @@ export default function AppointmentsPage() {
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false)
 
-  // View toggle + filters
+  // View toggle + filters + pagination
   const [view, setView] = useState<'table' | 'list'>('table')
   const [filterValues, setFilterValues] = useState<Record<string, string>>({})
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const pageSize = 10
 
   const [form, setForm] = useState({
     customerName: '',
@@ -72,20 +75,24 @@ export default function AppointmentsPage() {
 
   useEffect(() => { loadAll() }, [businessId])
 
-  async function loadAll() {
+  async function loadAll(currentPage = page, filters = filterValues) {
     setLoading(true)
     const params = new URLSearchParams()
-    if (filterValues.customer) params.set('search', filterValues.customer)
-    if (filterValues.payment) params.set('status', filterValues.payment)
+    if (filters.customer) params.set('search', filters.customer)
+    if (filters.payment) params.set('status', filters.payment)
+    params.set('page', String(currentPage))
+    params.set('pageSize', String(pageSize))
     const qs = params.toString()
     const [appointmentsRes, paymentsRes, servicesRes] = await Promise.all([
-      fetch(`/api/business/appointments${qs ? `?${qs}` : ''}`),
+      fetch(`/api/business/appointments?${qs}`),
       fetch('/api/business/payments'),
       fetch('/api/business/services'),
     ])
 
     if (appointmentsRes.ok) {
-      setAppointments(await appointmentsRes.json())
+      const json = await appointmentsRes.json()
+      setAppointments(json.data)
+      setTotal(json.total)
     }
     if (paymentsRes.ok) {
       const data = await paymentsRes.json()
@@ -189,13 +196,17 @@ export default function AppointmentsPage() {
     },
   ], [])
 
-  const filteredAppointments = useMemo(() => {
-    return appointments.filter((a) => {
-      if (filterValues.customer && !a.customer_name.toLowerCase().includes(filterValues.customer.toLowerCase())) return false
-      if (filterValues.payment && a.payment_method !== filterValues.payment) return false
-      return true
-    })
-  }, [appointments, filterValues])
+  function handlePageChange(newPage: number) {
+    setPage(newPage)
+    loadAll(newPage)
+  }
+
+  const paginationInfo: PaginationInfo = {
+    page,
+    pageSize,
+    total,
+    onPageChange: handlePageChange,
+  }
 
   const appointmentColumns: ColumnDef<Appointment>[] = useMemo(() => [
     {
@@ -236,7 +247,10 @@ export default function AppointmentsPage() {
   ], [services])
 
   function handleFilterChange(key: string, value: string) {
-    setFilterValues((prev) => ({ ...prev, [key]: value }))
+    const newFilters = { ...filterValues, [key]: value }
+    setFilterValues(newFilters)
+    setPage(1)
+    loadAll(1, newFilters)
   }
 
   function renderAppointmentCard(apt: Appointment) {
@@ -390,22 +404,24 @@ export default function AppointmentsPage() {
         {view === 'table' ? (
           <TableView<Appointment>
             columns={appointmentColumns}
-            data={filteredAppointments}
+            data={appointments}
             keyExtractor={(a) => a.id}
             filters={appointmentFilters}
             filterValues={filterValues}
             onFilterChange={handleFilterChange}
+            pagination={paginationInfo}
             emptyMessage="No appointments yet. Click 'Add Appointment' to create your first one."
           />
         ) : (
           <div className="max-w-2xl">
             <ListView<Appointment>
-              data={filteredAppointments}
+              data={appointments}
               keyExtractor={(a) => a.id}
               renderCard={renderAppointmentCard}
               filters={appointmentFilters}
               filterValues={filterValues}
               onFilterChange={handleFilterChange}
+              pagination={paginationInfo}
               emptyMessage="No appointments yet. Click 'Add Appointment' to create your first one."
             />
           </div>

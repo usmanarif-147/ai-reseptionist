@@ -33,9 +33,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'toDate must be a valid ISO date string' }, { status: 400 })
   }
 
+  const pageParam = searchParams.get('page')
+  const pageSizeParam = searchParams.get('pageSize')
+
   let query = supabase
     .from('appointments')
-    .select('*, services(name)')
+    .select('*, services(name)', { count: 'exact' })
     .eq('business_id', business.id)
 
   if (search) {
@@ -54,10 +57,23 @@ export async function GET(request: NextRequest) {
     query = query.lte('appointment_date', toDate)
   }
 
-  const { data: appointments, error } = await query.order('appointment_date', { ascending: false })
+  query = query.order('appointment_date', { ascending: false })
+
+  if (pageParam) {
+    const page = Math.max(parseInt(pageParam, 10) || 1, 1)
+    const pageSize = Math.min(Math.max(parseInt(pageSizeParam || '10', 10) || 10, 1), 100)
+    const from = (page - 1) * pageSize
+    query = query.range(from, from + pageSize - 1)
+  }
+
+  const { data: appointments, error, count } = await query
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  if (pageParam) {
+    return NextResponse.json({ data: appointments, total: count ?? 0 })
   }
 
   return NextResponse.json(appointments)

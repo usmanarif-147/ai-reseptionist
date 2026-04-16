@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
   const search = searchParams.get('search')
   const minPrice = searchParams.get('minPrice')
   const maxPrice = searchParams.get('maxPrice')
+  const status = searchParams.get('status')
 
   if (minPrice && isNaN(Number(minPrice))) {
     return NextResponse.json({ error: 'minPrice must be a valid number' }, { status: 400 })
@@ -22,9 +23,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'maxPrice must be a valid number' }, { status: 400 })
   }
 
+  const pageParam = searchParams.get('page')
+  const pageSizeParam = searchParams.get('pageSize')
+
   let query = supabase
     .from('services')
-    .select('*')
+    .select('*', { count: 'exact' })
     .eq('business_id', business.id)
 
   if (search) {
@@ -36,11 +40,29 @@ export async function GET(request: NextRequest) {
   if (maxPrice) {
     query = query.lte('price', Number(maxPrice))
   }
+  if (status === 'active') {
+    query = query.eq('is_active', true)
+  } else if (status === 'inactive') {
+    query = query.eq('is_active', false)
+  }
 
-  const { data: services, error } = await query.order('created_at', { ascending: true })
+  query = query.order('created_at', { ascending: true })
+
+  if (pageParam) {
+    const page = Math.max(parseInt(pageParam, 10) || 1, 1)
+    const pageSize = Math.min(Math.max(parseInt(pageSizeParam || '10', 10) || 10, 1), 100)
+    const from = (page - 1) * pageSize
+    query = query.range(from, from + pageSize - 1)
+  }
+
+  const { data: services, error, count } = await query
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  if (pageParam) {
+    return NextResponse.json({ data: services, total: count ?? 0 })
   }
 
   return NextResponse.json(services)

@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import { confirmDialog } from '@/components/confirmDialog'
 import { TableView, ListView, ViewToggle, Modal } from '@/components/dashboard'
-import type { ColumnDef, ActionDef, FilterDef } from '@/components/dashboard'
+import type { ColumnDef, ActionDef, FilterDef, PaginationInfo } from '@/components/dashboard'
 
 interface Service {
   id: string
@@ -46,9 +46,12 @@ export default function ServicesPage() {
   const [deleting, setDeleting] = useState<string | null>(null)
   const [error, setError] = useState('')
 
-  // View toggle + filters
+  // View toggle + filters + pagination
   const [view, setView] = useState<'table' | 'list'>('table')
   const [filterValues, setFilterValues] = useState<Record<string, string>>({})
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const pageSize = 10
 
   // Service form state
   const [form, setForm] = useState({
@@ -73,23 +76,35 @@ export default function ServicesPage() {
   const [cfDeleting, setCfDeleting] = useState<string | null>(null)
   const [cfError, setCfError] = useState('')
 
-  async function loadAll() {
+  async function loadAll(currentPage = page, filters = filterValues) {
     setLoading(true)
     const params = new URLSearchParams()
-    if (filterValues.name) params.set('search', filterValues.name)
+    if (filters.name) params.set('search', filters.name)
+    if (filters.status) params.set('status', filters.status)
+    params.set('page', String(currentPage))
+    params.set('pageSize', String(pageSize))
     const qs = params.toString()
     const [servicesRes, staffRes, cfRes] = await Promise.all([
-      fetch(`/api/business/services${qs ? `?${qs}` : ''}`),
+      fetch(`/api/business/services?${qs}`),
       fetch('/api/business/staff'),
       fetch('/api/business/service-custom-fields'),
     ])
-    if (servicesRes.ok) setServices(await servicesRes.json())
+    if (servicesRes.ok) {
+      const json = await servicesRes.json()
+      setServices(json.data)
+      setTotal(json.total)
+    }
     if (staffRes.ok) setStaff(await staffRes.json())
     if (cfRes.ok) setCustomFields(await cfRes.json())
     setLoading(false)
   }
 
   useEffect(() => { loadAll() }, [businessId])
+
+  function handlePageChange(newPage: number) {
+    setPage(newPage)
+    loadAll(newPage)
+  }
 
   function openCreate() {
     setForm({ name: '', description: '', price: '', duration_minutes: '30', category: '', is_active: true })
@@ -178,7 +193,7 @@ export default function ServicesPage() {
     const res = await fetch(`/api/business/services?id=${id}`, { method: 'DELETE' })
 
     if (res.ok) {
-      setServices(services.filter((s) => s.id !== id))
+      await loadAll()
     }
     setDeleting(null)
   }
@@ -285,14 +300,12 @@ export default function ServicesPage() {
     },
   ], [])
 
-  const filteredServices = useMemo(() => {
-    return services.filter((s) => {
-      if (filterValues.name && !s.name.toLowerCase().includes(filterValues.name.toLowerCase())) return false
-      if (filterValues.status === 'active' && !s.is_active) return false
-      if (filterValues.status === 'inactive' && s.is_active) return false
-      return true
-    })
-  }, [services, filterValues])
+  const paginationInfo: PaginationInfo = {
+    page,
+    pageSize,
+    total,
+    onPageChange: handlePageChange,
+  }
 
   const serviceColumns: ColumnDef<Service>[] = useMemo(() => [
     {
@@ -346,7 +359,10 @@ export default function ServicesPage() {
   ], [deleting])
 
   function handleFilterChange(key: string, value: string) {
-    setFilterValues((prev) => ({ ...prev, [key]: value }))
+    const newFilters = { ...filterValues, [key]: value }
+    setFilterValues(newFilters)
+    setPage(1)
+    loadAll(1, newFilters)
   }
 
   function renderServiceCard(service: Service) {
@@ -411,23 +427,25 @@ export default function ServicesPage() {
       ) : view === 'table' ? (
         <TableView<Service>
           columns={serviceColumns}
-          data={filteredServices}
+          data={services}
           keyExtractor={(s) => s.id}
           actions={serviceActions}
           filters={serviceFilters}
           filterValues={filterValues}
           onFilterChange={handleFilterChange}
+          pagination={paginationInfo}
           emptyMessage="No services match your filters."
         />
       ) : (
         <div className="max-w-2xl">
           <ListView<Service>
-            data={filteredServices}
+            data={services}
             keyExtractor={(s) => s.id}
             renderCard={renderServiceCard}
             filters={serviceFilters}
             filterValues={filterValues}
             onFilterChange={handleFilterChange}
+            pagination={paginationInfo}
             emptyMessage="No services match your filters."
           />
         </div>

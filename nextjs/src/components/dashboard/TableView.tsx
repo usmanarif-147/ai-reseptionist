@@ -3,6 +3,7 @@
 import { ReactNode } from 'react'
 import { TableViewProps } from './types'
 import FilterBar from './FilterBar'
+import Pagination from './Pagination'
 
 export default function TableView<T>({
   columns,
@@ -12,6 +13,7 @@ export default function TableView<T>({
   filters,
   filterValues,
   onFilterChange,
+  pagination,
   emptyMessage = 'No data found.',
   emptyIcon,
 }: TableViewProps<T>) {
@@ -81,6 +83,8 @@ export default function TableView<T>({
           </div>
         </div>
       )}
+
+      {pagination && <Pagination {...pagination} />}
     </div>
   )
 }

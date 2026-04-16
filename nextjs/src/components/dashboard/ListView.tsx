@@ -2,6 +2,7 @@
 
 import { ListViewProps } from './types'
 import FilterBar from './FilterBar'
+import Pagination from './Pagination'
 
 export default function ListView<T>({
   data,
@@ -10,6 +11,7 @@ export default function ListView<T>({
   filters,
   filterValues,
   onFilterChange,
+  pagination,
   emptyMessage = 'No data found.',
   emptyIcon,
 }: ListViewProps<T>) {
@@ -35,6 +37,8 @@ export default function ListView<T>({
           ))}
         </div>
       )}
+
+      {pagination && <Pagination {...pagination} />}
     </div>
   )
 }

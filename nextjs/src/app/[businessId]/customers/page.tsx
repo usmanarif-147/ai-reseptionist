@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import { TableView, ListView, ViewToggle } from '@/components/dashboard'
-import type { ColumnDef, FilterDef } from '@/components/dashboard'
+import type { ColumnDef, FilterDef, PaginationInfo } from '@/components/dashboard'
 
 interface Customer {
   id: string
@@ -57,14 +57,18 @@ export default function CustomersPage() {
   const [activeFilter, setActiveFilter] = useState('all')
   const [view, setView] = useState<'table' | 'list'>('table')
   const [filterValues, setFilterValues] = useState<Record<string, string>>({})
+  const [page, setPage] = useState(1)
+  const pageSize = 10
 
-  async function loadCustomers() {
+  async function loadCustomers(currentPage = page, filters = filterValues, typeFilter = activeFilter) {
     setLoading(true)
     const params = new URLSearchParams()
-    if (activeFilter !== 'all') params.set('type', activeFilter)
-    if (filterValues.name) params.set('search', filterValues.name)
+    if (typeFilter !== 'all') params.set('type', typeFilter)
+    if (filters.name) params.set('search', filters.name)
+    params.set('page', String(currentPage))
+    params.set('pageSize', String(pageSize))
     const qs = params.toString()
-    const res = await fetch(`/api/business/customers${qs ? `?${qs}` : ''}`)
+    const res = await fetch(`/api/business/customers?${qs}`)
     if (res.ok) {
       const data = await res.json()
       setCustomers(data.customers)
@@ -75,16 +79,21 @@ export default function CustomersPage() {
 
   useEffect(() => { loadCustomers() }, [businessId, activeFilter])
 
+  function handlePageChange(newPage: number) {
+    setPage(newPage)
+    loadCustomers(newPage)
+  }
+
+  const paginationInfo: PaginationInfo = {
+    page,
+    pageSize,
+    total,
+    onPageChange: handlePageChange,
+  }
+
   const customerFilters: FilterDef[] = useMemo(() => [
     { key: 'name', label: 'Name', type: 'text', placeholder: 'Search by name...' },
   ], [])
-
-  const filteredCustomers = useMemo(() => {
-    return customers.filter((c) => {
-      if (filterValues.name && !(c.name || '').toLowerCase().includes(filterValues.name.toLowerCase())) return false
-      return true
-    })
-  }, [customers, filterValues])
 
   const customerColumns: ColumnDef<Customer>[] = useMemo(() => [
     {
@@ -125,7 +134,10 @@ export default function CustomersPage() {
   ], [])
 
   function handleFilterChange(key: string, value: string) {
-    setFilterValues((prev) => ({ ...prev, [key]: value }))
+    const newFilters = { ...filterValues, [key]: value }
+    setFilterValues(newFilters)
+    setPage(1)
+    loadCustomers(1, newFilters)
   }
 
   function renderCustomerCard(customer: Customer) {
@@ -170,7 +182,7 @@ export default function CustomersPage() {
         {TYPE_FILTERS.map((filter) => (
           <button
             key={filter.value}
-            onClick={() => setActiveFilter(filter.value)}
+            onClick={() => { setActiveFilter(filter.value); setPage(1) }}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               activeFilter === filter.value
                 ? 'bg-blue-600 text-white'
@@ -191,22 +203,24 @@ export default function CustomersPage() {
       ) : view === 'table' ? (
         <TableView<Customer>
           columns={customerColumns}
-          data={filteredCustomers}
+          data={customers}
           keyExtractor={(c) => c.id}
           filters={customerFilters}
           filterValues={filterValues}
           onFilterChange={handleFilterChange}
+          pagination={paginationInfo}
           emptyMessage="No customers match the selected filter."
         />
       ) : (
         <div className="max-w-2xl">
           <ListView<Customer>
-            data={filteredCustomers}
+            data={customers}
             keyExtractor={(c) => c.id}
             renderCard={renderCustomerCard}
             filters={customerFilters}
             filterValues={filterValues}
             onFilterChange={handleFilterChange}
+            pagination={paginationInfo}
             emptyMessage="No customers match the selected filter."
           />
         </div>

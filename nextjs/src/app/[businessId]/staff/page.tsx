@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import { confirmDialog } from '@/components/confirmDialog'
 import { TableView, ListView, ViewToggle, Modal } from '@/components/dashboard'
-import type { ColumnDef, ActionDef, FilterDef } from '@/components/dashboard'
+import type { ColumnDef, ActionDef, FilterDef, PaginationInfo } from '@/components/dashboard'
 
 interface StaffMember {
   id: string
@@ -96,28 +96,43 @@ export default function StaffPage() {
   const [cfDeleting, setCfDeleting] = useState<string | null>(null)
   const [cfError, setCfError] = useState('')
 
-  // View toggle + filters
+  // View toggle + filters + pagination
   const [view, setView] = useState<'table' | 'list'>('table')
   const [filterValues, setFilterValues] = useState<Record<string, string>>({})
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const pageSize = 10
 
   const apiBase = '/api/business/staff'
 
-  async function loadAll() {
+  async function loadAll(currentPage = page, filters = filterValues) {
     setLoading(true)
     const params = new URLSearchParams()
-    if (filterValues.name) params.set('search', filterValues.name)
-    if (filterValues.role) params.set('role', filterValues.role)
+    if (filters.name) params.set('search', filters.name)
+    if (filters.role) params.set('role', filters.role)
+    if (filters.status) params.set('status', filters.status)
+    params.set('page', String(currentPage))
+    params.set('pageSize', String(pageSize))
     const qs = params.toString()
     const [staffRes, cfRes] = await Promise.all([
-      fetch(`${apiBase}${qs ? `?${qs}` : ''}`),
+      fetch(`${apiBase}?${qs}`),
       fetch('/api/business/staff-custom-fields'),
     ])
-    if (staffRes.ok) setStaff(await staffRes.json())
+    if (staffRes.ok) {
+      const json = await staffRes.json()
+      setStaff(json.data)
+      setTotal(json.total)
+    }
     if (cfRes.ok) setCustomFields(await cfRes.json())
     setLoading(false)
   }
 
   useEffect(() => { loadAll() }, [businessId])
+
+  function handlePageChange(newPage: number) {
+    setPage(newPage)
+    loadAll(newPage)
+  }
 
   function openCreate() {
     setForm({ ...emptyForm, contact: { phone: '', email: '' } })
@@ -216,7 +231,7 @@ export default function StaffPage() {
 
     const res = await fetch(`${apiBase}?id=${id}`, { method: 'DELETE' })
     if (res.ok) {
-      setStaff(staff.filter((s) => s.id !== id))
+      await loadAll()
     }
     setDeleting(null)
   }
@@ -334,15 +349,12 @@ export default function StaffPage() {
     },
   ], [])
 
-  const filteredStaff = useMemo(() => {
-    return staff.filter((m) => {
-      if (filterValues.name && !m.name.toLowerCase().includes(filterValues.name.toLowerCase())) return false
-      if (filterValues.role && !m.role?.toLowerCase().includes(filterValues.role.toLowerCase())) return false
-      if (filterValues.status === 'active' && !m.is_active) return false
-      if (filterValues.status === 'inactive' && m.is_active) return false
-      return true
-    })
-  }, [staff, filterValues])
+  const paginationInfo: PaginationInfo = {
+    page,
+    pageSize,
+    total,
+    onPageChange: handlePageChange,
+  }
 
   const staffColumns: ColumnDef<StaffMember>[] = useMemo(() => [
     {
@@ -388,7 +400,10 @@ export default function StaffPage() {
   ], [deleting])
 
   function handleFilterChange(key: string, value: string) {
-    setFilterValues((prev) => ({ ...prev, [key]: value }))
+    const newFilters = { ...filterValues, [key]: value }
+    setFilterValues(newFilters)
+    setPage(1)
+    loadAll(1, newFilters)
   }
 
   function renderStaffCard(member: StaffMember) {
@@ -452,23 +467,25 @@ export default function StaffPage() {
       ) : view === 'table' ? (
         <TableView<StaffMember>
           columns={staffColumns}
-          data={filteredStaff}
+          data={staff}
           keyExtractor={(m) => m.id}
           actions={staffActions}
           filters={staffFilters}
           filterValues={filterValues}
           onFilterChange={handleFilterChange}
+          pagination={paginationInfo}
           emptyMessage="No staff members match your filters."
         />
       ) : (
         <div className="max-w-2xl">
           <ListView<StaffMember>
-            data={filteredStaff}
+            data={staff}
             keyExtractor={(m) => m.id}
             renderCard={renderStaffCard}
             filters={staffFilters}
             filterValues={filterValues}
             onFilterChange={handleFilterChange}
+            pagination={paginationInfo}
             emptyMessage="No staff members match your filters."
           />
         </div>

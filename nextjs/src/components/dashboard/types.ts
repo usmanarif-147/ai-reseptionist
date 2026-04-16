@@ -22,6 +22,13 @@ export interface FilterDef {
   options?: { value: string; label: string }[]
 }
 
+export interface PaginationInfo {
+  page: number
+  pageSize: number
+  total: number
+  onPageChange: (page: number) => void
+}
+
 export interface DataDisplayProps<T> {
   data: T[]
   keyExtractor: (item: T) => string
@@ -29,6 +36,7 @@ export interface DataDisplayProps<T> {
   filters?: FilterDef[]
   filterValues?: Record<string, string>
   onFilterChange?: (key: string, value: string) => void
+  pagination?: PaginationInfo
   emptyMessage?: string
   emptyIcon?: ReactNode
 }
