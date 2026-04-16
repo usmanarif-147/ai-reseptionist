@@ -66,6 +66,7 @@ export async function GET(request: NextRequest) {
       businessId = newBusiness.id
       await Promise.all([
         adminSupabase.from('widget_settings').insert({ business_id: businessId }),
+        adminSupabase.from('widget_appearance').insert({ business_id: businessId }),
         adminSupabase.from('payment_settings').insert({ business_id: businessId, payment_type: 'cash' }),
         adminSupabase.from('business_hours').insert(
           Array.from({ length: 7 }, (_, i) => ({

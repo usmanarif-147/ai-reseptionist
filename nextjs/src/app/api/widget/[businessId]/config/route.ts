@@ -32,53 +32,53 @@ export async function GET(
 
   const supabase = createAdminClient()
 
-  const { data: settings, error } = await supabase
-    .from('widget_settings')
-    .select('*')
-    .eq('business_id', businessId)
-    .single()
+  const [settingsResult, appearanceResult] = await Promise.all([
+    supabase.from('widget_settings').select('welcome_message').eq('business_id', businessId).single(),
+    supabase.from('widget_appearance').select('*').eq('business_id', businessId).single(),
+  ])
 
-  if (error || !settings) {
+  if (settingsResult.error || !settingsResult.data || appearanceResult.error || !appearanceResult.data) {
     return NextResponse.json(
       { error: 'Business not found' },
       { status: 404, headers: CORS_HEADERS }
     )
   }
 
+  const appearance = appearanceResult.data
+
   // Explicitly shape the public response — never expose all columns directly.
-  // Defaults for new columns guard against pre-migration state.
+  // Return primary_color as "color" for backward compatibility with widget.js.
   const response = {
-    color: settings.color,
-    welcome_message: settings.welcome_message,
-    tooltip_enabled: settings.tooltip_enabled ?? true,
-    tooltip_text: settings.tooltip_text ?? 'Ask us anything — we reply instantly 24/7',
-    // WS-02: Appearance settings
-    tooltip_bg_color: settings.tooltip_bg_color ?? '#FFFFFF',
-    tooltip_text_color: settings.tooltip_text_color ?? '#1F2937',
-    tooltip_position: settings.tooltip_position ?? 'side',
-    intent_title: settings.intent_title ?? 'How can we help you?',
-    intent_description: settings.intent_description ?? 'Select an option to get started',
-    intent_color_1: settings.intent_color_1 ?? '#3B82F6',
-    intent_color_2: settings.intent_color_2 ?? '#10B981',
-    intent_color_3: settings.intent_color_3 ?? '#F59E0B',
-    intent_border_radius: settings.intent_border_radius ?? 'rounded',
-    avatar_enabled: settings.avatar_enabled ?? true,
-    avatar_selection: settings.avatar_selection ?? 'robot',
-    header_show_status: settings.header_show_status ?? true,
-    header_title: settings.header_title ?? 'Chat with us',
-    header_subtitle: settings.header_subtitle ?? 'We reply instantly',
-    typing_indicator_style: settings.typing_indicator_style ?? 'animated_dots',
-    session_ended_enabled: settings.session_ended_enabled ?? true,
-    session_ended_icon: settings.session_ended_icon ?? '👋',
-    session_ended_title: settings.session_ended_title ?? 'Chat Ended',
-    session_ended_message: settings.session_ended_message ?? 'Thank you for reaching out! We hope we answered all your questions.',
-    session_expired_enabled: settings.session_expired_enabled ?? true,
-    session_expired_icon: settings.session_expired_icon ?? '⏰',
-    session_expired_title: settings.session_expired_title ?? 'Session Expired',
-    session_expired_message: settings.session_expired_message ?? 'Your session ended due to inactivity. Start a new chat anytime.',
-    feedback_enabled: settings.feedback_enabled ?? true,
-    feedback_prompt_title: settings.feedback_prompt_title ?? 'How was your experience?',
-    feedback_note_placeholder: settings.feedback_note_placeholder ?? 'Leave a message for the business (optional)',
+    color: appearance.primary_color,
+    welcome_message: settingsResult.data.welcome_message,
+    tooltip_enabled: appearance.tooltip_enabled ?? true,
+    tooltip_text: appearance.tooltip_text ?? 'Ask us anything — we reply instantly 24/7',
+    tooltip_bg_color: appearance.tooltip_bg_color ?? '#FFFFFF',
+    tooltip_text_color: appearance.tooltip_text_color ?? '#1F2937',
+    tooltip_position: appearance.tooltip_position ?? 'side',
+    intent_title: appearance.intent_title ?? 'How can we help you?',
+    intent_description: appearance.intent_description ?? 'Select an option to get started',
+    intent_color_1: appearance.intent_color_1 ?? '#3B82F6',
+    intent_color_2: appearance.intent_color_2 ?? '#10B981',
+    intent_color_3: appearance.intent_color_3 ?? '#F59E0B',
+    intent_border_radius: appearance.intent_border_radius ?? 'rounded',
+    avatar_enabled: appearance.avatar_enabled ?? true,
+    avatar_selection: appearance.avatar_selection ?? 'robot',
+    header_show_status: appearance.header_show_status ?? true,
+    header_title: appearance.header_title ?? 'Chat with us',
+    header_subtitle: appearance.header_subtitle ?? 'We reply instantly',
+    typing_indicator_style: appearance.typing_indicator_style ?? 'animated_dots',
+    session_ended_enabled: appearance.session_ended_enabled ?? true,
+    session_ended_icon: appearance.session_ended_icon ?? '👋',
+    session_ended_title: appearance.session_ended_title ?? 'Chat Ended',
+    session_ended_message: appearance.session_ended_message ?? 'Thank you for reaching out! We hope we answered all your questions.',
+    session_expired_enabled: appearance.session_expired_enabled ?? true,
+    session_expired_icon: appearance.session_expired_icon ?? '⏰',
+    session_expired_title: appearance.session_expired_title ?? 'Session Expired',
+    session_expired_message: appearance.session_expired_message ?? 'Your session ended due to inactivity. Start a new chat anytime.',
+    feedback_enabled: appearance.feedback_enabled ?? true,
+    feedback_prompt_title: appearance.feedback_prompt_title ?? 'How was your experience?',
+    feedback_note_placeholder: appearance.feedback_note_placeholder ?? 'Leave a message for the business (optional)',
   }
 
   return NextResponse.json(response, {

@@ -73,6 +73,7 @@ export async function POST(request: NextRequest) {
   // Create default widget settings and payment settings
   await Promise.all([
     adminSupabase.from('widget_settings').insert({ business_id: business.id }),
+    adminSupabase.from('widget_appearance').insert({ business_id: business.id }),
     adminSupabase.from('payment_settings').insert({
       business_id: business.id,
       payment_type: 'cash',

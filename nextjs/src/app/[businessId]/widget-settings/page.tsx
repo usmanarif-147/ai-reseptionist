@@ -494,33 +494,44 @@ export default function WidgetPage() {
         </div>
       )}
 
-      {/* Tabbed Settings Section */}
-      <div className="bg-white rounded-xl border border-gray-100 max-w-4xl">
-        <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
+      {/* Two-column layout: settings + sticky preview */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr,auto] gap-8 items-start">
+        {/* Left column: tabs + content */}
+        <div className="bg-white rounded-xl border border-gray-100 max-w-4xl">
+          <TabBar tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
 
-        <div className="p-6">
-          {activeTab === 'appearance' && (
-            <AppearanceTab
-              appearance={appearance}
-              updateAppearance={updateAppearance}
-              saving={saving}
-              onSave={handleSave}
-            />
-          )}
+          <div className="p-6">
+            {activeTab === 'appearance' && (
+              <AppearanceTab
+                appearance={appearance}
+                updateAppearance={updateAppearance}
+                saving={saving}
+                onSave={handleSave}
+              />
+            )}
 
-          {activeTab === 'information' && (
-            <InformationControlTab
-              businessDetailsCount={businessDetailsCount}
-              showBusinessHours={showBusinessHours}
-              setShowBusinessHours={setShowBusinessHours}
-              servicesStatusLabel={servicesStatusLabel()}
-              staffStatusLabel={staffStatusLabel()}
-              appointmentCount={appointmentCount}
-              setActiveModal={setActiveModal}
-              saving={saving}
-              onSave={saveSettings}
-            />
-          )}
+            {activeTab === 'information' && (
+              <InformationControlTab
+                businessDetailsCount={businessDetailsCount}
+                showBusinessHours={showBusinessHours}
+                setShowBusinessHours={setShowBusinessHours}
+                servicesStatusLabel={servicesStatusLabel()}
+                staffStatusLabel={staffStatusLabel()}
+                appointmentCount={appointmentCount}
+                setActiveModal={setActiveModal}
+                saving={saving}
+                onSave={saveSettings}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Right column: sticky preview */}
+        <div className="hidden lg:block">
+          <h3 className="text-sm font-medium text-gray-700 mb-3">Live Preview</h3>
+          <div className="bg-gray-50 rounded-lg p-6 sticky top-8">
+            <WidgetPreview appearance={appearance} />
+          </div>
         </div>
       </div>
 
@@ -724,9 +735,7 @@ function AppearanceTab({
   onSave: (e: React.FormEvent) => void
 }) {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-      {/* Settings Column */}
-      <div>
+    <div>
         <form onSubmit={onSave} className="space-y-0">
 
           {/* A. General */}
@@ -1099,15 +1108,6 @@ function AppearanceTab({
             </button>
           </div>
         </form>
-      </div>
-
-      {/* Preview Column */}
-      <div>
-        <h3 className="text-sm font-medium text-gray-700 mb-3">Live Preview</h3>
-        <div className="bg-gray-50 rounded-lg p-6 sticky top-8">
-          <WidgetPreview appearance={appearance} />
-        </div>
-      </div>
     </div>
   )
 }
@@ -1115,7 +1115,7 @@ function AppearanceTab({
 // --- Widget Preview ---
 
 function WidgetPreview({ appearance }: { appearance: AppearanceSettings }) {
-  const [previewScreen, setPreviewScreen] = useState<'intent' | 'chat' | 'ended' | 'expired' | 'feedback'>('intent')
+  const [previewScreen, setPreviewScreen] = useState<'launcher' | 'intent' | 'prechat' | 'chat' | 'ended' | 'expired' | 'feedback'>('intent')
   const selectedAvatar = AVATAR_OPTIONS.find(a => a.id === appearance.avatar_selection) || AVATAR_OPTIONS[0]
   const borderRadiusValue = BORDER_RADIUS_OPTIONS.find(b => b.id === appearance.intent_border_radius)?.value || '14px'
 
@@ -1124,7 +1124,9 @@ function WidgetPreview({ appearance }: { appearance: AppearanceSettings }) {
       {/* Screen selector */}
       <div className="flex gap-1 mb-3 flex-wrap">
         {([
+          ['launcher', 'Launcher'],
           ['intent', 'Intent'],
+          ['prechat', 'Pre-Chat'],
           ['chat', 'Chat'],
           ['feedback', 'Feedback'],
           ['ended', 'Ended'],
@@ -1145,8 +1147,63 @@ function WidgetPreview({ appearance }: { appearance: AppearanceSettings }) {
         ))}
       </div>
 
-      {/* Widget Preview */}
-      <div className="w-full max-w-[310px] mx-auto">
+      {/* Launcher Screen */}
+      {previewScreen === 'launcher' && (
+        <div className="w-[348px] mx-auto">
+          <div className="flex flex-col items-end gap-2 pt-8">
+            {/* Tooltip */}
+            {appearance.tooltip_enabled && (
+              <>
+                {appearance.tooltip_position === 'side' && (
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="rounded-lg px-3 py-2 text-[13px] shadow-md max-w-[220px] leading-snug"
+                      style={{ backgroundColor: appearance.tooltip_bg_color, color: appearance.tooltip_text_color }}
+                    >
+                      {appearance.tooltip_text}
+                    </div>
+                    <div
+                      className="w-14 h-14 rounded-full flex items-center justify-center text-white shadow-lg flex-shrink-0"
+                      style={{ backgroundColor: appearance.color }}
+                    >
+                      <svg className="w-6 h-6" fill="white" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.2L4 17.2V4h16v12z"/></svg>
+                    </div>
+                  </div>
+                )}
+                {appearance.tooltip_position === 'above' && (
+                  <div className="flex flex-col items-end gap-2">
+                    <div
+                      className="rounded-lg px-3 py-2 text-[13px] shadow-md max-w-[220px] leading-snug"
+                      style={{ backgroundColor: appearance.tooltip_bg_color, color: appearance.tooltip_text_color }}
+                    >
+                      {appearance.tooltip_text}
+                    </div>
+                    <div
+                      className="w-14 h-14 rounded-full flex items-center justify-center text-white shadow-lg"
+                      style={{ backgroundColor: appearance.color }}
+                    >
+                      <svg className="w-6 h-6" fill="white" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.2L4 17.2V4h16v12z"/></svg>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+            {/* Launcher button only (no tooltip) */}
+            {!appearance.tooltip_enabled && (
+              <div
+                className="w-14 h-14 rounded-full flex items-center justify-center text-white shadow-lg"
+                style={{ backgroundColor: appearance.color }}
+              >
+                <svg className="w-6 h-6" fill="white" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.2L4 17.2V4h16v12z"/></svg>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Widget Preview (all screens except launcher) */}
+      {previewScreen !== 'launcher' && (
+      <div className="w-[348px] mx-auto">
         <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200">
           {/* Header */}
           <div className="px-4 py-3 text-white flex justify-between items-center" style={{ backgroundColor: appearance.color }}>
@@ -1197,6 +1254,41 @@ function WidgetPreview({ appearance }: { appearance: AppearanceSettings }) {
                     <span className="opacity-60 text-sm">{'\u203A'}</span>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Pre-Chat Form Screen */}
+            {previewScreen === 'prechat' && (
+              <div className="p-4 flex flex-col gap-3">
+                <div>
+                  <div className="text-sm font-bold text-gray-900">Just a few details</div>
+                  <div className="text-[11px] text-gray-400 mt-0.5">We&apos;ll remember you for next time</div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-600 mb-1">Name</label>
+                  <div className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-400 bg-white">
+                    Your name (optional)
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-600 mb-1">Email <span className="text-red-500">*</span></label>
+                  <div className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-400 bg-white">
+                    you@example.com
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-600 mb-1">Phone</label>
+                  <div className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-400 bg-white">
+                    Phone number (optional)
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="w-full py-2 rounded-lg text-xs font-semibold text-white mt-1"
+                  style={{ backgroundColor: appearance.color }}
+                >
+                  Start Chat
+                </button>
               </div>
             )}
 
@@ -1349,57 +1441,8 @@ function WidgetPreview({ appearance }: { appearance: AppearanceSettings }) {
             </div>
           )}
         </div>
-
-        {/* Tooltip Preview */}
-        {appearance.tooltip_enabled && previewScreen === 'intent' && (
-          <div className="flex justify-end mt-2 items-center gap-2">
-            {appearance.tooltip_position === 'side' && (
-              <>
-                <div
-                  className="rounded-lg px-2.5 py-1.5 text-[11px] shadow-sm max-w-[160px] leading-snug"
-                  style={{ backgroundColor: appearance.tooltip_bg_color, color: appearance.tooltip_text_color }}
-                >
-                  {appearance.tooltip_text}
-                </div>
-                <div
-                  className="w-11 h-11 rounded-full flex items-center justify-center text-white shadow-md"
-                  style={{ backgroundColor: appearance.color }}
-                >
-                  <svg className="w-5 h-5" fill="white" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.2L4 17.2V4h16v12z"/></svg>
-                </div>
-              </>
-            )}
-            {appearance.tooltip_position === 'above' && (
-              <div className="flex flex-col items-end gap-1.5">
-                <div
-                  className="rounded-lg px-2.5 py-1.5 text-[11px] shadow-sm max-w-[160px] leading-snug"
-                  style={{ backgroundColor: appearance.tooltip_bg_color, color: appearance.tooltip_text_color }}
-                >
-                  {appearance.tooltip_text}
-                </div>
-                <div
-                  className="w-11 h-11 rounded-full flex items-center justify-center text-white shadow-md"
-                  style={{ backgroundColor: appearance.color }}
-                >
-                  <svg className="w-5 h-5" fill="white" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.2L4 17.2V4h16v12z"/></svg>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Launcher only (no tooltip) */}
-        {(!appearance.tooltip_enabled || previewScreen !== 'intent') && (
-          <div className="flex justify-end mt-2">
-            <div
-              className="w-11 h-11 rounded-full flex items-center justify-center text-white shadow-md"
-              style={{ backgroundColor: appearance.color }}
-            >
-              <svg className="w-5 h-5" fill="white" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.2L4 17.2V4h16v12z"/></svg>
-            </div>
-          </div>
-        )}
       </div>
+      )}
     </div>
   )
 }
