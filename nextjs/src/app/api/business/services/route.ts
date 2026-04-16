@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticateAndGetBusiness } from '@/lib/auth'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const auth = await authenticateAndGetBusiness()
   if (auth.error) return auth.error
   const { business, supabase } = auth
@@ -10,11 +10,34 @@ export async function GET() {
     return NextResponse.json({ error: 'No business found' }, { status: 404 })
   }
 
-  const { data: services, error } = await supabase
+  const { searchParams } = request.nextUrl
+  const search = searchParams.get('search')
+  const minPrice = searchParams.get('minPrice')
+  const maxPrice = searchParams.get('maxPrice')
+
+  if (minPrice && isNaN(Number(minPrice))) {
+    return NextResponse.json({ error: 'minPrice must be a valid number' }, { status: 400 })
+  }
+  if (maxPrice && isNaN(Number(maxPrice))) {
+    return NextResponse.json({ error: 'maxPrice must be a valid number' }, { status: 400 })
+  }
+
+  let query = supabase
     .from('services')
     .select('*')
     .eq('business_id', business.id)
-    .order('created_at', { ascending: true })
+
+  if (search) {
+    query = query.ilike('name', `%${search}%`)
+  }
+  if (minPrice) {
+    query = query.gte('price', Number(minPrice))
+  }
+  if (maxPrice) {
+    query = query.lte('price', Number(maxPrice))
+  }
+
+  const { data: services, error } = await query.order('created_at', { ascending: true })
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })

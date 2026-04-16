@@ -1,7 +1,9 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useParams } from 'next/navigation'
+import { TableView } from '@/components/dashboard'
+import type { ColumnDef } from '@/components/dashboard'
 
 interface VisitorOverview {
   total_widget_opens: number
@@ -364,54 +366,40 @@ function CustomerSatisfactionSection({ data }: { data: CustomerSatisfaction }) {
 function FeedbackNotesSection({ data }: { data: FeedbackNotes }) {
   const notes = data.notes
 
-  if (notes.length === 0) {
-    return (
-      <section>
-        <SectionHeading>Feedback Notes</SectionHeading>
-        <div className="bg-white rounded-xl border border-gray-100 p-6">
-          <p className="text-sm text-gray-500">No feedback notes yet.</p>
-        </div>
-      </section>
-    )
-  }
+  const feedbackColumns: ColumnDef<FeedbackNote>[] = useMemo(() => [
+    {
+      header: 'Rating',
+      accessor: (note) => (
+        <span className="text-yellow-400">
+          {note.rating
+            ? Array.from({ length: note.rating }, () => '\u2605').join('')
+            : '---'}
+        </span>
+      ),
+    },
+    {
+      header: 'Note',
+      accessor: (note) => <span className="max-w-xs truncate inline-block">{note.note}</span>,
+    },
+    {
+      header: 'Date',
+      accessor: (note) => formatDate(note.ended_at),
+    },
+    {
+      header: 'Customer',
+      accessor: (note) => note.customer_name || note.customer_email || 'Anonymous',
+    },
+  ], [])
 
   return (
     <section>
       <SectionHeading>Feedback Notes</SectionHeading>
-      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100">
-                <th className="text-left px-6 py-3 text-gray-500 font-medium">Rating</th>
-                <th className="text-left px-6 py-3 text-gray-500 font-medium">Note</th>
-                <th className="text-left px-6 py-3 text-gray-500 font-medium">Date</th>
-                <th className="text-left px-6 py-3 text-gray-500 font-medium">Customer</th>
-              </tr>
-            </thead>
-            <tbody>
-              {notes.map((note, i) => (
-                <tr key={i} className="border-b border-gray-50 last:border-0">
-                  <td className="px-6 py-3">
-                    <span className="text-yellow-400">
-                      {note.rating
-                        ? Array.from({ length: note.rating }, () => '\u2605').join('')
-                        : '---'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-3 text-gray-700 max-w-xs truncate">{note.note}</td>
-                  <td className="px-6 py-3 text-gray-500 whitespace-nowrap">
-                    {formatDate(note.ended_at)}
-                  </td>
-                  <td className="px-6 py-3 text-gray-700">
-                    {note.customer_name || note.customer_email || 'Anonymous'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <TableView<FeedbackNote>
+        columns={feedbackColumns}
+        data={notes}
+        keyExtractor={(note) => `${note.ended_at}-${note.note.slice(0, 20)}`}
+        emptyMessage="No feedback notes yet."
+      />
     </section>
   )
 }

@@ -1,7 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useParams } from 'next/navigation'
+import { TableView, ListView, ViewToggle } from '@/components/dashboard'
+import type { ColumnDef, FilterDef } from '@/components/dashboard'
 
 interface Customer {
   id: string
@@ -53,13 +55,16 @@ export default function CustomersPage() {
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [activeFilter, setActiveFilter] = useState('all')
+  const [view, setView] = useState<'table' | 'list'>('table')
+  const [filterValues, setFilterValues] = useState<Record<string, string>>({})
 
   async function loadCustomers() {
     setLoading(true)
-    const url = activeFilter === 'all'
-      ? '/api/business/customers'
-      : `/api/business/customers?type=${activeFilter}`
-    const res = await fetch(url)
+    const params = new URLSearchParams()
+    if (activeFilter !== 'all') params.set('type', activeFilter)
+    if (filterValues.name) params.set('search', filterValues.name)
+    const qs = params.toString()
+    const res = await fetch(`/api/business/customers${qs ? `?${qs}` : ''}`)
     if (res.ok) {
       const data = await res.json()
       setCustomers(data.customers)
@@ -70,7 +75,83 @@ export default function CustomersPage() {
 
   useEffect(() => { loadCustomers() }, [businessId, activeFilter])
 
-  const filtered = customers
+  const customerFilters: FilterDef[] = useMemo(() => [
+    { key: 'name', label: 'Name', type: 'text', placeholder: 'Search by name...' },
+  ], [])
+
+  const filteredCustomers = useMemo(() => {
+    return customers.filter((c) => {
+      if (filterValues.name && !(c.name || '').toLowerCase().includes(filterValues.name.toLowerCase())) return false
+      return true
+    })
+  }, [customers, filterValues])
+
+  const customerColumns: ColumnDef<Customer>[] = useMemo(() => [
+    {
+      header: 'Name',
+      accessor: (c) => c.name ? (
+        <span className="font-medium text-gray-900">{c.name}</span>
+      ) : <span className="text-gray-400">-</span>,
+    },
+    { header: 'Email', accessor: 'email' },
+    {
+      header: 'Phone',
+      accessor: (c) => c.phone || <span className="text-gray-400">-</span>,
+    },
+    {
+      header: 'Type',
+      accessor: (c) => (
+        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${TYPE_BADGE[c.type] || 'bg-gray-100 text-gray-800'}`}>
+          {TYPE_LABEL[c.type] || c.type}
+        </span>
+      ),
+    },
+    {
+      header: 'First Seen',
+      accessor: (c) => formatDate(c.first_seen_at),
+    },
+    {
+      header: 'Last Seen',
+      accessor: (c) => formatDate(c.last_seen_at),
+    },
+    {
+      header: 'Sessions',
+      accessor: 'total_sessions',
+    },
+    {
+      header: 'Appointments',
+      accessor: 'total_appointments',
+    },
+  ], [])
+
+  function handleFilterChange(key: string, value: string) {
+    setFilterValues((prev) => ({ ...prev, [key]: value }))
+  }
+
+  function renderCustomerCard(customer: Customer) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-100 p-5">
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-gray-900">{customer.name || 'Anonymous'}</h3>
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${TYPE_BADGE[customer.type] || 'bg-gray-100 text-gray-800'}`}>
+                {TYPE_LABEL[customer.type] || customer.type}
+              </span>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">{customer.email}</p>
+            {customer.phone && <p className="text-xs text-gray-500">{customer.phone}</p>}
+            <div className="flex gap-4 mt-2 text-xs text-gray-500">
+              <span>First: {formatDate(customer.first_seen_at)}</span>
+              <span>Last: {formatDate(customer.last_seen_at)}</span>
+              <span>{customer.total_sessions} sessions</span>
+              <span>{customer.total_appointments} appointments</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   if (loading) return <LoadingSkeleton />
 
@@ -81,6 +162,7 @@ export default function CustomersPage() {
           <h1 className="text-2xl font-bold text-gray-900 mb-1">Customers</h1>
           <p className="text-gray-500 text-sm">View and manage customers who have interacted with your widget</p>
         </div>
+        <ViewToggle view={view} onToggle={setView} />
       </div>
 
       {/* Type filter tabs */}
@@ -103,53 +185,30 @@ export default function CustomersPage() {
         ))}
       </div>
 
-      {/* Table or empty state */}
+      {/* Table/List or empty state */}
       {customers.length === 0 ? (
         <EmptyState />
-      ) : filtered.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-100 p-8 text-center">
-          <p className="text-sm text-gray-500">No customers match the selected filter.</p>
-        </div>
+      ) : view === 'table' ? (
+        <TableView<Customer>
+          columns={customerColumns}
+          data={filteredCustomers}
+          keyExtractor={(c) => c.id}
+          filters={customerFilters}
+          filterValues={filterValues}
+          onFilterChange={handleFilterChange}
+          emptyMessage="No customers match the selected filter."
+        />
       ) : (
-        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="text-left px-5 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Name</th>
-                  <th className="text-left px-5 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Email</th>
-                  <th className="text-left px-5 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Phone</th>
-                  <th className="text-left px-5 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Type</th>
-                  <th className="text-left px-5 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">First Seen</th>
-                  <th className="text-left px-5 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Last Seen</th>
-                  <th className="text-left px-5 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Sessions</th>
-                  <th className="text-left px-5 py-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Appointments</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((customer) => (
-                  <tr key={customer.id} className="border-b border-gray-50 hover:bg-gray-50">
-                    <td className="px-5 py-3 text-gray-900 font-medium">
-                      {customer.name || <span className="text-gray-400">-</span>}
-                    </td>
-                    <td className="px-5 py-3 text-gray-600">{customer.email}</td>
-                    <td className="px-5 py-3 text-gray-600">
-                      {customer.phone || <span className="text-gray-400">-</span>}
-                    </td>
-                    <td className="px-5 py-3">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${TYPE_BADGE[customer.type] || 'bg-gray-100 text-gray-800'}`}>
-                        {TYPE_LABEL[customer.type] || customer.type}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-gray-600">{formatDate(customer.first_seen_at)}</td>
-                    <td className="px-5 py-3 text-gray-600">{formatDate(customer.last_seen_at)}</td>
-                    <td className="px-5 py-3 text-gray-600">{customer.total_sessions}</td>
-                    <td className="px-5 py-3 text-gray-600">{customer.total_appointments}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <div className="max-w-2xl">
+          <ListView<Customer>
+            data={filteredCustomers}
+            keyExtractor={(c) => c.id}
+            renderCard={renderCustomerCard}
+            filters={customerFilters}
+            filterValues={filterValues}
+            onFilterChange={handleFilterChange}
+            emptyMessage="No customers match the selected filter."
+          />
         </div>
       )}
     </div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+import { ListView } from '@/components/dashboard'
 
 // Matches DB convention: 0=Sunday, 1=Monday, ..., 6=Saturday
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -96,46 +97,51 @@ export default function HoursPage() {
       )}
 
       <form onSubmit={handleSave}>
-        <div className="bg-white rounded-xl border border-gray-100 divide-y divide-gray-100 max-w-2xl">
-          {hours.map((day) => (
-            <div key={day.day_of_week} className="flex items-center gap-4 px-6 py-4">
-              <div className="w-28">
-                <span className="text-sm font-medium text-gray-900">{DAYS[day.day_of_week]}</span>
-              </div>
-
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={!day.is_closed}
-                  onChange={(e) => updateDay(day.day_of_week, 'is_closed', !e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-600">{day.is_closed ? 'Closed' : 'Open'}</span>
-              </label>
-
-              {!day.is_closed && (
-                <div className="flex items-center gap-2 ml-auto">
-                  <input
-                    type="time"
-                    value={day.open_time}
-                    onChange={(e) => updateDay(day.day_of_week, 'open_time', e.target.value)}
-                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <span className="text-gray-400 text-sm">to</span>
-                  <input
-                    type="time"
-                    value={day.close_time}
-                    onChange={(e) => updateDay(day.day_of_week, 'close_time', e.target.value)}
-                    className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+        <div className="max-w-2xl">
+          <ListView<DayHours>
+            data={hours}
+            keyExtractor={(day) => String(day.day_of_week)}
+            renderCard={(day) => (
+              <div className="bg-white rounded-xl border border-gray-100 flex items-center gap-4 px-6 py-4">
+                <div className="w-28">
+                  <span className="text-sm font-medium text-gray-900">{DAYS[day.day_of_week]}</span>
                 </div>
-              )}
 
-              {day.is_closed && (
-                <span className="ml-auto text-sm text-gray-400">---</span>
-              )}
-            </div>
-          ))}
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={!day.is_closed}
+                    onChange={(e) => updateDay(day.day_of_week, 'is_closed', !e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-600">{day.is_closed ? 'Closed' : 'Open'}</span>
+                </label>
+
+                {!day.is_closed && (
+                  <div className="flex items-center gap-2 ml-auto">
+                    <input
+                      type="time"
+                      value={day.open_time}
+                      onChange={(e) => updateDay(day.day_of_week, 'open_time', e.target.value)}
+                      className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="text-gray-400 text-sm">to</span>
+                    <input
+                      type="time"
+                      value={day.close_time}
+                      onChange={(e) => updateDay(day.day_of_week, 'close_time', e.target.value)}
+                      className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                )}
+
+                {day.is_closed && (
+                  <span className="ml-auto text-sm text-gray-400">---</span>
+                )}
+              </div>
+            )}
+            emptyMessage="No business hours configured."
+          />
         </div>
 
         <button

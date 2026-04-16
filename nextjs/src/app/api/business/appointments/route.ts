@@ -10,7 +10,7 @@ const ALLOWED_METHODS: Record<string, PaymentMethod[]> = {
   both: ['cash_on_arrival', 'paid_cash', 'paid_online'],
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const auth = await authenticateAndGetBusiness()
   if (auth.error) return auth.error
   const { business, supabase } = auth
@@ -19,11 +19,42 @@ export async function GET() {
     return NextResponse.json({ error: 'No business found' }, { status: 404 })
   }
 
-  const { data: appointments, error } = await supabase
+  const { searchParams } = request.nextUrl
+  const search = searchParams.get('search')
+  const status = searchParams.get('status')
+  const serviceId = searchParams.get('serviceId')
+  const fromDate = searchParams.get('fromDate')
+  const toDate = searchParams.get('toDate')
+
+  if (fromDate && isNaN(Date.parse(fromDate))) {
+    return NextResponse.json({ error: 'fromDate must be a valid ISO date string' }, { status: 400 })
+  }
+  if (toDate && isNaN(Date.parse(toDate))) {
+    return NextResponse.json({ error: 'toDate must be a valid ISO date string' }, { status: 400 })
+  }
+
+  let query = supabase
     .from('appointments')
     .select('*, services(name)')
     .eq('business_id', business.id)
-    .order('appointment_date', { ascending: false })
+
+  if (search) {
+    query = query.ilike('customer_name', `%${search}%`)
+  }
+  if (status) {
+    query = query.eq('payment_method', status)
+  }
+  if (serviceId) {
+    query = query.eq('service_id', serviceId)
+  }
+  if (fromDate) {
+    query = query.gte('appointment_date', fromDate)
+  }
+  if (toDate) {
+    query = query.lte('appointment_date', toDate)
+  }
+
+  const { data: appointments, error } = await query.order('appointment_date', { ascending: false })
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })

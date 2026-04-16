@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'No business found' }, { status: 404 })
   }
 
+  const searchFilter = request.nextUrl.searchParams.get('search')
   const typeFilter = request.nextUrl.searchParams.get('type')
   const limitParam = request.nextUrl.searchParams.get('limit')
   const offsetParam = request.nextUrl.searchParams.get('offset')
@@ -61,9 +62,20 @@ export async function GET(request: NextRequest) {
     }
   })
 
-  const filtered = typeFilter
-    ? allResults.filter((c) => c.type === typeFilter)
-    : allResults
+  let filtered = allResults
+
+  if (searchFilter) {
+    const term = searchFilter.toLowerCase()
+    filtered = filtered.filter(
+      (c) =>
+        (c.name && c.name.toLowerCase().includes(term)) ||
+        (c.email && c.email.toLowerCase().includes(term))
+    )
+  }
+
+  if (typeFilter) {
+    filtered = filtered.filter((c) => c.type === typeFilter)
+  }
 
   const total = filtered.length
   const paginated = filtered.slice(offset, offset + limit)

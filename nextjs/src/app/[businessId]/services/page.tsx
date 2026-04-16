@@ -1,8 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import { confirmDialog } from '@/components/confirmDialog'
+import { TableView, ListView, ViewToggle, Modal } from '@/components/dashboard'
+import type { ColumnDef, ActionDef, FilterDef } from '@/components/dashboard'
 
 interface Service {
   id: string
@@ -38,11 +40,15 @@ export default function ServicesPage() {
   // Existing state
   const [services, setServices] = useState<Service[]>([])
   const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
+  const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [error, setError] = useState('')
+
+  // View toggle + filters
+  const [view, setView] = useState<'table' | 'list'>('table')
+  const [filterValues, setFilterValues] = useState<Record<string, string>>({})
 
   // Service form state
   const [form, setForm] = useState({
@@ -57,7 +63,7 @@ export default function ServicesPage() {
   const [customFields, setCustomFields] = useState<CustomField[]>([])
 
   // Custom Fields Manager state
-  const [showCustomFieldForm, setShowCustomFieldForm] = useState(false)
+  const [isCfModalOpen, setIsCfModalOpen] = useState(false)
   const [editingCustomFieldId, setEditingCustomFieldId] = useState<string | null>(null)
   const [cfForm, setCfForm] = useState({
     label: '', input_type: 'text' as CustomField['input_type'],
@@ -69,8 +75,11 @@ export default function ServicesPage() {
 
   async function loadAll() {
     setLoading(true)
+    const params = new URLSearchParams()
+    if (filterValues.name) params.set('search', filterValues.name)
+    const qs = params.toString()
     const [servicesRes, staffRes, cfRes] = await Promise.all([
-      fetch('/api/business/services'),
+      fetch(`/api/business/services${qs ? `?${qs}` : ''}`),
       fetch('/api/business/staff'),
       fetch('/api/business/service-custom-fields'),
     ])
@@ -87,8 +96,8 @@ export default function ServicesPage() {
     setStaffIds([])
     setMeta({})
     setEditingId(null)
-    setShowForm(true)
     setError('')
+    setIsModalOpen(true)
   }
 
   function openEdit(service: Service) {
@@ -103,12 +112,12 @@ export default function ServicesPage() {
     setStaffIds(service.staff_ids || [])
     setMeta(service.meta || {})
     setEditingId(service.id)
-    setShowForm(true)
     setError('')
+    setIsModalOpen(true)
   }
 
-  function closeForm() {
-    setShowForm(false)
+  function closeModal() {
+    setIsModalOpen(false)
     setEditingId(null)
     setForm({ name: '', description: '', price: '', duration_minutes: '30', category: '', is_active: true })
     setStaffIds([])
@@ -116,9 +125,12 @@ export default function ServicesPage() {
     setError('')
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
+  async function handleSubmit() {
     setError('')
+
+    if (!form.name.trim()) { setError('Service name is required'); return }
+    if (!form.price || isNaN(parseFloat(form.price))) { setError('Valid price is required'); return }
+
     setSaving(true)
 
     const body = {
@@ -149,7 +161,7 @@ export default function ServicesPage() {
     }
 
     await loadAll()
-    closeForm()
+    closeModal()
     setSaving(false)
   }
 
@@ -180,8 +192,8 @@ export default function ServicesPage() {
   function openCfCreate() {
     setCfForm({ label: '', input_type: 'text', is_required: false, optionsText: '' })
     setEditingCustomFieldId(null)
-    setShowCustomFieldForm(true)
     setCfError('')
+    setIsCfModalOpen(true)
   }
 
   function openCfEdit(cf: CustomField) {
@@ -192,12 +204,12 @@ export default function ServicesPage() {
       optionsText: cf.options.join('\n'),
     })
     setEditingCustomFieldId(cf.id)
-    setShowCustomFieldForm(true)
     setCfError('')
+    setIsCfModalOpen(true)
   }
 
-  function closeCfForm() {
-    setShowCustomFieldForm(false)
+  function closeCfModal() {
+    setIsCfModalOpen(false)
     setEditingCustomFieldId(null)
     setCfForm({ label: '', input_type: 'text', is_required: false, optionsText: '' })
     setCfError('')
@@ -239,7 +251,7 @@ export default function ServicesPage() {
 
     const updatedCf = await fetch('/api/business/service-custom-fields')
     if (updatedCf.ok) setCustomFields(await updatedCf.json())
-    closeCfForm()
+    closeCfModal()
     setCfSaving(false)
   }
 
@@ -259,6 +271,117 @@ export default function ServicesPage() {
     setCfDeleting(null)
   }
 
+  const serviceFilters: FilterDef[] = useMemo(() => [
+    { key: 'name', label: 'Name', type: 'text', placeholder: 'Search by name...' },
+    {
+      key: 'status',
+      label: 'Status',
+      type: 'select',
+      placeholder: 'All Statuses',
+      options: [
+        { value: 'active', label: 'Active' },
+        { value: 'inactive', label: 'Inactive' },
+      ],
+    },
+  ], [])
+
+  const filteredServices = useMemo(() => {
+    return services.filter((s) => {
+      if (filterValues.name && !s.name.toLowerCase().includes(filterValues.name.toLowerCase())) return false
+      if (filterValues.status === 'active' && !s.is_active) return false
+      if (filterValues.status === 'inactive' && s.is_active) return false
+      return true
+    })
+  }, [services, filterValues])
+
+  const serviceColumns: ColumnDef<Service>[] = useMemo(() => [
+    {
+      header: 'Name',
+      accessor: (s) => (
+        <div>
+          <span className="font-medium text-gray-900">{s.name}</span>
+          {s.description && <p className="text-xs text-gray-500 mt-0.5">{s.description}</p>}
+        </div>
+      ),
+    },
+    {
+      header: 'Price',
+      accessor: (s) => `$${Number(s.price).toFixed(2)}`,
+    },
+    {
+      header: 'Duration',
+      accessor: (s) => `${s.duration_minutes} min`,
+    },
+    {
+      header: 'Category',
+      accessor: (s) => s.category ? (
+        <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{s.category}</span>
+      ) : <span className="text-gray-400">-</span>,
+    },
+    {
+      header: 'Status',
+      accessor: (s) => (
+        <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${s.is_active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${s.is_active ? 'bg-green-500' : 'bg-gray-400'}`} />
+          {s.is_active ? 'Active' : 'Inactive'}
+        </span>
+      ),
+    },
+  ], [])
+
+  const serviceActions: ActionDef<Service>[] = useMemo(() => [
+    {
+      label: 'Edit',
+      icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" /></svg>,
+      onClick: (s) => openEdit(s),
+      className: 'text-gray-400 hover:text-blue-600 p-1',
+    },
+    {
+      label: 'Delete',
+      icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>,
+      onClick: (s) => handleDelete(s.id),
+      disabled: (s) => deleting === s.id,
+      className: 'text-gray-400 hover:text-red-600 p-1 disabled:opacity-50',
+    },
+  ], [deleting])
+
+  function handleFilterChange(key: string, value: string) {
+    setFilterValues((prev) => ({ ...prev, [key]: value }))
+  }
+
+  function renderServiceCard(service: Service) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-100 p-5 flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-gray-900">{service.name}</h3>
+            <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${service.is_active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${service.is_active ? 'bg-green-500' : 'bg-gray-400'}`} />
+              {service.is_active ? 'Active' : 'Inactive'}
+            </span>
+          </div>
+          {service.description && (
+            <p className="text-xs text-gray-500 mt-0.5">{service.description}</p>
+          )}
+          <div className="flex gap-4 mt-2 text-xs text-gray-500">
+            <span>${Number(service.price).toFixed(2)}</span>
+            <span>{service.duration_minutes} min</span>
+            {service.category && <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{service.category}</span>}
+            {service.staff_ids?.length > 0 && <span>{service.staff_ids.length} staff</span>}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => openEdit(service)} className="text-gray-400 hover:text-blue-600 p-1">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" /></svg>
+          </button>
+          <button onClick={() => handleDelete(service.id)} disabled={deleting === service.id} className="text-gray-400 hover:text-red-600 p-1 disabled:opacity-50">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   if (loading) return <LoadingSkeleton />
 
   return (
@@ -268,7 +391,8 @@ export default function ServicesPage() {
           <h1 className="text-2xl font-bold text-gray-900 mb-1">Services</h1>
           <p className="text-gray-500 text-sm">Manage the services your business offers</p>
         </div>
-        {!showForm && (
+        <div className="flex items-center gap-3">
+          <ViewToggle view={view} onToggle={setView} />
           <button
             onClick={openCreate}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center gap-2"
@@ -278,247 +402,206 @@ export default function ServicesPage() {
             </svg>
             Add Service
           </button>
-        )}
+        </div>
       </div>
 
-      {/* Form */}
-      {showForm && (
-        <div className="bg-white rounded-xl border border-gray-100 p-6 mb-6 max-w-2xl">
-          <h2 className="text-base font-semibold text-gray-900 mb-4">
-            {editingId ? 'Edit Service' : 'New Service'}
-          </h2>
+      {/* Services List */}
+      {services.length === 0 ? (
+        <EmptyState onAdd={openCreate} />
+      ) : view === 'table' ? (
+        <TableView<Service>
+          columns={serviceColumns}
+          data={filteredServices}
+          keyExtractor={(s) => s.id}
+          actions={serviceActions}
+          filters={serviceFilters}
+          filterValues={filterValues}
+          onFilterChange={handleFilterChange}
+          emptyMessage="No services match your filters."
+        />
+      ) : (
+        <div className="max-w-2xl">
+          <ListView<Service>
+            data={filteredServices}
+            keyExtractor={(s) => s.id}
+            renderCard={renderServiceCard}
+            filters={serviceFilters}
+            filterValues={filterValues}
+            onFilterChange={handleFilterChange}
+            emptyMessage="No services match your filters."
+          />
+        </div>
+      )}
 
+      {/* Service Modal */}
+      <Modal
+        isOpen={isModalOpen}
+        onClose={closeModal}
+        onSave={handleSubmit}
+        title={editingId ? 'Edit Service' : 'New Service'}
+        isSaving={saving}
+      >
+        <div className="space-y-4">
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-4 text-sm">
+            <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
               {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Service Name</label>
+            <input
+              type="text"
+              required
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="e.g. Haircut"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <textarea
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              rows={2}
+              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Brief description of the service"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Service Name</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Price ($)</label>
               <input
-                type="text"
+                type="number"
                 required
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                min="0"
+                step="0.01"
+                value={form.price}
+                onChange={(e) => setForm({ ...form, price: e.target.value })}
                 className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="e.g. Haircut"
+                placeholder="0.00"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-              <textarea
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
-                rows={2}
+              <label className="block text-sm font-medium text-gray-700 mb-1">Duration (min)</label>
+              <select
+                value={form.duration_minutes}
+                onChange={(e) => setForm({ ...form, duration_minutes: e.target.value })}
                 className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Brief description of the service"
-              />
+              >
+                {[15, 30, 45, 60, 90, 120].map((d) => (
+                  <option key={d} value={d}>{d} min</option>
+                ))}
+              </select>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Price ($)</label>
-                <input
-                  type="number"
-                  required
-                  min="0"
-                  step="0.01"
-                  value={form.price}
-                  onChange={(e) => setForm({ ...form, price: e.target.value })}
-                  className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="0.00"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Duration (min)</label>
-                <select
-                  value={form.duration_minutes}
-                  onChange={(e) => setForm({ ...form, duration_minutes: e.target.value })}
-                  className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {[15, 30, 45, 60, 90, 120].map((d) => (
-                    <option key={d} value={d}>{d} min</option>
-                  ))}
-                </select>
-              </div>
-            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+            <input
+              type="text"
+              value={form.category}
+              onChange={(e) => setForm({ ...form, category: e.target.value })}
+              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="e.g. Haircuts, Facials"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="is_active"
+              checked={form.is_active}
+              onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
+              className="w-4 h-4 rounded border-gray-300 text-blue-600"
+            />
+            <label htmlFor="is_active" className="text-sm font-medium text-gray-700">Active (visible to customers)</label>
+          </div>
+
+          {/* Staff assignment */}
+          {staff.length > 0 && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-              <input
-                type="text"
-                value={form.category}
-                onChange={(e) => setForm({ ...form, category: e.target.value })}
-                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="e.g. Haircuts, Facials"
-              />
+              <label className="block text-sm font-medium text-gray-700 mb-2">Assigned Staff</label>
+              <p className="text-xs text-gray-500 mb-2">Leave empty if any staff member can deliver this service.</p>
+              <div className="space-y-1.5">
+                {staff.map((member) => (
+                  <label key={member.id} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={staffIds.includes(member.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) setStaffIds([...staffIds, member.id])
+                        else setStaffIds(staffIds.filter(id => id !== member.id))
+                      }}
+                      className="w-4 h-4 rounded border-gray-300 text-blue-600"
+                    />
+                    <span className="text-sm text-gray-700">{member.name}{member.role ? ` — ${member.role}` : ''}</span>
+                  </label>
+                ))}
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="is_active"
-                checked={form.is_active}
-                onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
-                className="w-4 h-4 rounded border-gray-300 text-blue-600"
-              />
-              <label htmlFor="is_active" className="text-sm font-medium text-gray-700">Active (visible to customers)</label>
-            </div>
+          )}
 
-            {/* Staff assignment */}
-            {staff.length > 0 && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Assigned Staff</label>
-                <p className="text-xs text-gray-500 mb-2">Leave empty if any staff member can deliver this service.</p>
-                <div className="space-y-1.5">
-                  {staff.map((member) => (
-                    <label key={member.id} className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={staffIds.includes(member.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) setStaffIds([...staffIds, member.id])
-                          else setStaffIds(staffIds.filter(id => id !== member.id))
-                        }}
-                        className="w-4 h-4 rounded border-gray-300 text-blue-600"
-                      />
-                      <span className="text-sm text-gray-700">{member.name}{member.role ? ` — ${member.role}` : ''}</span>
-                    </label>
+          {/* Custom fields */}
+          {customFields.length > 0 && (
+            <div>
+              <div className="border-t border-gray-100 pt-4">
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Custom Fields</p>
+                <div className="space-y-4">
+                  {customFields.map((cf) => (
+                    <div key={cf.id}>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        {cf.label}{cf.is_required && <span className="text-red-500 ml-0.5">*</span>}
+                      </label>
+                      {cf.input_type === 'text' && (
+                        <input
+                          type="text"
+                          value={(meta[cf.field_key] as string) || ''}
+                          onChange={(e) => setMeta({ ...meta, [cf.field_key]: e.target.value })}
+                          required={cf.is_required}
+                          className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      )}
+                      {cf.input_type === 'number' && (
+                        <input
+                          type="number"
+                          value={(meta[cf.field_key] as string) || ''}
+                          onChange={(e) => setMeta({ ...meta, [cf.field_key]: e.target.value })}
+                          required={cf.is_required}
+                          className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      )}
+                      {cf.input_type === 'checkbox' && (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={!!(meta[cf.field_key])}
+                            onChange={(e) => setMeta({ ...meta, [cf.field_key]: e.target.checked })}
+                            className="w-4 h-4 rounded border-gray-300 text-blue-600"
+                          />
+                          <span className="text-sm text-gray-600">Yes</span>
+                        </div>
+                      )}
+                      {cf.input_type === 'dropdown' && (
+                        <select
+                          value={(meta[cf.field_key] as string) || ''}
+                          onChange={(e) => setMeta({ ...meta, [cf.field_key]: e.target.value })}
+                          required={cf.is_required}
+                          className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">Select...</option>
+                          {cf.options.map((opt) => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>
-            )}
-
-            {/* Custom fields */}
-            {customFields.length > 0 && (
-              <div>
-                <div className="border-t border-gray-100 pt-4">
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Custom Fields</p>
-                  <div className="space-y-4">
-                    {customFields.map((cf) => (
-                      <div key={cf.id}>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          {cf.label}{cf.is_required && <span className="text-red-500 ml-0.5">*</span>}
-                        </label>
-                        {cf.input_type === 'text' && (
-                          <input
-                            type="text"
-                            value={(meta[cf.field_key] as string) || ''}
-                            onChange={(e) => setMeta({ ...meta, [cf.field_key]: e.target.value })}
-                            required={cf.is_required}
-                            className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        )}
-                        {cf.input_type === 'number' && (
-                          <input
-                            type="number"
-                            value={(meta[cf.field_key] as string) || ''}
-                            onChange={(e) => setMeta({ ...meta, [cf.field_key]: e.target.value })}
-                            required={cf.is_required}
-                            className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        )}
-                        {cf.input_type === 'checkbox' && (
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={!!(meta[cf.field_key])}
-                              onChange={(e) => setMeta({ ...meta, [cf.field_key]: e.target.checked })}
-                              className="w-4 h-4 rounded border-gray-300 text-blue-600"
-                            />
-                            <span className="text-sm text-gray-600">Yes</span>
-                          </div>
-                        )}
-                        {cf.input_type === 'dropdown' && (
-                          <select
-                            value={(meta[cf.field_key] as string) || ''}
-                            onChange={(e) => setMeta({ ...meta, [cf.field_key]: e.target.value })}
-                            required={cf.is_required}
-                            className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            <option value="">Select...</option>
-                            {cf.options.map((opt) => (
-                              <option key={opt} value={opt}>{opt}</option>
-                            ))}
-                          </select>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="flex gap-3">
-              <button
-                type="submit"
-                disabled={saving}
-                className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-              >
-                {saving ? 'Saving...' : editingId ? 'Update Service' : 'Add Service'}
-              </button>
-              <button
-                type="button"
-                onClick={closeForm}
-                className="text-gray-600 px-5 py-2 rounded-lg text-sm font-medium hover:bg-gray-100"
-              >
-                Cancel
-              </button>
             </div>
-          </form>
+          )}
         </div>
-      )}
-
-      {/* Services List */}
-      {services.length === 0 && !showForm ? (
-        <EmptyState onAdd={openCreate} />
-      ) : (
-        <div className="space-y-3 max-w-2xl">
-          {services.map((service) => (
-            <div
-              key={service.id}
-              className="bg-white rounded-xl border border-gray-100 p-5 flex items-center justify-between"
-            >
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-semibold text-gray-900">{service.name}</h3>
-                  <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${service.is_active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${service.is_active ? 'bg-green-500' : 'bg-gray-400'}`} />
-                    {service.is_active ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
-                {service.description && (
-                  <p className="text-xs text-gray-500 mt-0.5">{service.description}</p>
-                )}
-                <div className="flex gap-4 mt-2 text-xs text-gray-500">
-                  <span>${Number(service.price).toFixed(2)}</span>
-                  <span>{service.duration_minutes} min</span>
-                  {service.category && <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{service.category}</span>}
-                  {service.staff_ids?.length > 0 && <span>{service.staff_ids.length} staff</span>}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => openEdit(service)}
-                  className="text-gray-400 hover:text-blue-600 p-1"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
-                  </svg>
-                </button>
-                <button
-                  onClick={() => handleDelete(service.id)}
-                  disabled={deleting === service.id}
-                  className="text-gray-400 hover:text-red-600 p-1 disabled:opacity-50"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      </Modal>
 
       {/* Custom Fields Manager */}
       <div className="mt-10 max-w-2xl">
@@ -527,99 +610,85 @@ export default function ServicesPage() {
             <h2 className="text-base font-semibold text-gray-900">Custom Fields</h2>
             <p className="text-xs text-gray-500 mt-0.5">Define extra fields that appear in your service form.</p>
           </div>
-          {!showCustomFieldForm && (
-            <button
-              onClick={openCfCreate}
-              className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-              Add Field
-            </button>
-          )}
+          <button
+            onClick={openCfCreate}
+            className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            Add Field
+          </button>
         </div>
 
-        {/* Custom field add/edit form */}
-        {showCustomFieldForm && (
-          <div className="bg-white rounded-xl border border-gray-100 p-5 mb-4">
+        {/* Custom Fields Modal */}
+        <Modal
+          isOpen={isCfModalOpen}
+          onClose={closeCfModal}
+          onSave={handleCfSubmit}
+          title={editingCustomFieldId ? 'Edit Custom Field' : 'New Custom Field'}
+          isSaving={cfSaving}
+        >
+          <div className="space-y-3">
             {cfError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-3 text-sm">{cfError}</div>
+              <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">{cfError}</div>
             )}
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Field Label</label>
-                <input
-                  type="text"
-                  value={cfForm.label}
-                  onChange={(e) => setCfForm({ ...cfForm, label: e.target.value })}
-                  className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="e.g. Gender Type, Includes Wash"
-                />
-                {cfForm.label && (
-                  <p className="text-xs text-gray-400 mt-1">Key: {toFieldKey(cfForm.label)}</p>
-                )}
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Input Type</label>
-                  <select
-                    value={cfForm.input_type}
-                    onChange={(e) => setCfForm({ ...cfForm, input_type: e.target.value as CustomField['input_type'] })}
-                    className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="text">Text</option>
-                    <option value="number">Number</option>
-                    <option value="dropdown">Dropdown</option>
-                    <option value="checkbox">Checkbox (Yes/No)</option>
-                  </select>
-                </div>
-                <div className="flex items-end pb-2.5">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={cfForm.is_required}
-                      onChange={(e) => setCfForm({ ...cfForm, is_required: e.target.checked })}
-                      className="w-4 h-4 rounded border-gray-300 text-blue-600"
-                    />
-                    <span className="text-sm text-gray-700">Required</span>
-                  </label>
-                </div>
-              </div>
-              {cfForm.input_type === 'dropdown' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Options</label>
-                  <textarea
-                    value={cfForm.optionsText}
-                    onChange={(e) => setCfForm({ ...cfForm, optionsText: e.target.value })}
-                    rows={2}
-                    className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder={"One option per line, e.g.:\nMale\nFemale\nAny"}
-                  />
-                </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Field Label</label>
+              <input
+                type="text"
+                value={cfForm.label}
+                onChange={(e) => setCfForm({ ...cfForm, label: e.target.value })}
+                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="e.g. Gender Type, Includes Wash"
+              />
+              {cfForm.label && (
+                <p className="text-xs text-gray-400 mt-1">Key: {toFieldKey(cfForm.label)}</p>
               )}
-              <div className="flex gap-3">
-                <button
-                  onClick={handleCfSubmit}
-                  disabled={cfSaving}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Input Type</label>
+                <select
+                  value={cfForm.input_type}
+                  onChange={(e) => setCfForm({ ...cfForm, input_type: e.target.value as CustomField['input_type'] })}
+                  className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  {cfSaving ? 'Saving...' : editingCustomFieldId ? 'Update Field' : 'Add Field'}
-                </button>
-                <button
-                  type="button"
-                  onClick={closeCfForm}
-                  className="text-gray-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-100"
-                >
-                  Cancel
-                </button>
+                  <option value="text">Text</option>
+                  <option value="number">Number</option>
+                  <option value="dropdown">Dropdown</option>
+                  <option value="checkbox">Checkbox (Yes/No)</option>
+                </select>
+              </div>
+              <div className="flex items-end pb-2.5">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={cfForm.is_required}
+                    onChange={(e) => setCfForm({ ...cfForm, is_required: e.target.checked })}
+                    className="w-4 h-4 rounded border-gray-300 text-blue-600"
+                  />
+                  <span className="text-sm text-gray-700">Required</span>
+                </label>
               </div>
             </div>
+            {cfForm.input_type === 'dropdown' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Options</label>
+                <textarea
+                  value={cfForm.optionsText}
+                  onChange={(e) => setCfForm({ ...cfForm, optionsText: e.target.value })}
+                  rows={2}
+                  className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder={"One option per line, e.g.:\nMale\nFemale\nAny"}
+                />
+              </div>
+            )}
           </div>
-        )}
+        </Modal>
 
         {/* Custom fields list */}
-        {customFields.length === 0 && !showCustomFieldForm ? (
+        {customFields.length === 0 ? (
           <div className="bg-white rounded-xl border border-gray-100 p-8 text-center">
             <p className="text-sm text-gray-500">No custom fields defined yet. Add fields to extend your service form.</p>
           </div>
