@@ -2,30 +2,17 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { ListView } from '@/components/dashboard'
+import { DayHoursEditor, emptyDaySlots, groupRowsByDay, flattenDaysToRows } from '@/components/dashboard'
+import type { DaySlots } from '@/components/dashboard'
 
-// Matches DB convention: 0=Sunday, 1=Monday, ..., 6=Saturday
-const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-
-interface DayHours {
-  day_of_week: number
-  open_time: string
-  close_time: string
-  is_closed: boolean
-}
-
-function defaultHours(): DayHours[] {
-  return DAYS.map((_, i) => ({
-    day_of_week: i,
-    open_time: '09:00',
-    close_time: '17:00',
-    is_closed: i === 0 || i === 6, // Sunday and Saturday closed by default
-  }))
+function defaultHours(): DaySlots[] {
+  // Monday–Friday open by default; Saturday/Sunday closed.
+  return emptyDaySlots({ defaultOpenDays: [1, 2, 3, 4, 5] })
 }
 
 export default function HoursPage() {
   const { businessId } = useParams<{ businessId: string }>()
-  const [hours, setHours] = useState<DayHours[]>(defaultHours())
+  const [hours, setHours] = useState<DaySlots[]>(defaultHours())
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -37,38 +24,46 @@ export default function HoursPage() {
     setLoading(true)
     const res = await fetch('/api/business/hours')
     if (res.ok) {
-      const data: DayHours[] = await res.json()
-      if (data.length > 0) {
-        const merged = defaultHours().map((def) => {
-          const found = data.find((d) => d.day_of_week === def.day_of_week)
-          return found || def
-        })
-        setHours(merged)
+      const data = await res.json()
+      if (Array.isArray(data) && data.length > 0) {
+        setHours(groupRowsByDay(data, defaultHours()))
       }
     }
     setLoading(false)
-  }
-
-  function updateDay(dayIndex: number, field: keyof DayHours, value: string | boolean) {
-    setHours((prev) =>
-      prev.map((h) => (h.day_of_week === dayIndex ? { ...h, [field]: value } : h))
-    )
   }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
     setError('')
     setSuccess('')
-    setSaving(true)
 
+    for (const day of hours) {
+      if (day.is_closed) continue
+      if (day.slots.length === 0) {
+        setError('Each open day must have at least one time slot.')
+        return
+      }
+      for (const slot of day.slots) {
+        if (!slot.open_time || !slot.close_time) {
+          setError('Each slot must have both an open and close time.')
+          return
+        }
+        if (slot.open_time >= slot.close_time) {
+          setError('Each slot\u2019s open time must be before its close time.')
+          return
+        }
+      }
+    }
+
+    setSaving(true)
     const res = await fetch('/api/business/hours', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hours }),
+      body: JSON.stringify({ hours: flattenDaysToRows(hours) }),
     })
 
     if (!res.ok) {
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
       setError(data.error || 'Failed to save hours')
       setSaving(false)
       return
@@ -83,7 +78,9 @@ export default function HoursPage() {
   return (
     <div>
       <h1 className="text-2xl font-bold text-gray-900 mb-1">Business Hours</h1>
-      <p className="text-gray-500 text-sm mb-8">Set when your business is open for appointments</p>
+      <p className="text-gray-500 text-sm mb-8">
+        Set when your business is open. Add multiple slots per day to represent breaks (e.g., lunch).
+      </p>
 
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-4 text-sm max-w-2xl">
@@ -98,50 +95,7 @@ export default function HoursPage() {
 
       <form onSubmit={handleSave}>
         <div className="max-w-2xl">
-          <ListView<DayHours>
-            data={hours}
-            keyExtractor={(day) => String(day.day_of_week)}
-            renderCard={(day) => (
-              <div className="bg-white rounded-xl border border-gray-100 flex items-center gap-4 px-6 py-4">
-                <div className="w-28">
-                  <span className="text-sm font-medium text-gray-900">{DAYS[day.day_of_week]}</span>
-                </div>
-
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={!day.is_closed}
-                    onChange={(e) => updateDay(day.day_of_week, 'is_closed', !e.target.checked)}
-                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <span className="text-sm text-gray-600">{day.is_closed ? 'Closed' : 'Open'}</span>
-                </label>
-
-                {!day.is_closed && (
-                  <div className="flex items-center gap-2 ml-auto">
-                    <input
-                      type="time"
-                      value={day.open_time}
-                      onChange={(e) => updateDay(day.day_of_week, 'open_time', e.target.value)}
-                      className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <span className="text-gray-400 text-sm">to</span>
-                    <input
-                      type="time"
-                      value={day.close_time}
-                      onChange={(e) => updateDay(day.day_of_week, 'close_time', e.target.value)}
-                      className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                )}
-
-                {day.is_closed && (
-                  <span className="ml-auto text-sm text-gray-400">---</span>
-                )}
-              </div>
-            )}
-            emptyMessage="No business hours configured."
-          />
+          <DayHoursEditor hours={hours} onChange={setHours} />
         </div>
 
         <button

@@ -15,6 +15,7 @@ interface Service {
   category: string | null
   is_active: boolean
   staff_ids: string[]
+  max_bookings_per_slot: number
   meta: Record<string, unknown>
 }
 
@@ -56,7 +57,7 @@ export default function ServicesPage() {
   // Service form state
   const [form, setForm] = useState({
     name: '', description: '', price: '', duration_minutes: '30',
-    category: '', is_active: true
+    category: '', is_active: true, max_bookings_per_slot: '1'
   })
   const [staffIds, setStaffIds] = useState<string[]>([])
   const [meta, setMeta] = useState<Record<string, unknown>>({})
@@ -107,7 +108,7 @@ export default function ServicesPage() {
   }
 
   function openCreate() {
-    setForm({ name: '', description: '', price: '', duration_minutes: '30', category: '', is_active: true })
+    setForm({ name: '', description: '', price: '', duration_minutes: '30', category: '', is_active: true, max_bookings_per_slot: '1' })
     setStaffIds([])
     setMeta({})
     setEditingId(null)
@@ -123,6 +124,7 @@ export default function ServicesPage() {
       duration_minutes: String(service.duration_minutes),
       category: service.category || '',
       is_active: service.is_active,
+      max_bookings_per_slot: String(service.max_bookings_per_slot ?? 1),
     })
     setStaffIds(service.staff_ids || [])
     setMeta(service.meta || {})
@@ -134,7 +136,7 @@ export default function ServicesPage() {
   function closeModal() {
     setIsModalOpen(false)
     setEditingId(null)
-    setForm({ name: '', description: '', price: '', duration_minutes: '30', category: '', is_active: true })
+    setForm({ name: '', description: '', price: '', duration_minutes: '30', category: '', is_active: true, max_bookings_per_slot: '1' })
     setStaffIds([])
     setMeta({})
     setError('')
@@ -145,6 +147,12 @@ export default function ServicesPage() {
 
     if (!form.name.trim()) { setError('Service name is required'); return }
     if (!form.price || isNaN(parseFloat(form.price))) { setError('Valid price is required'); return }
+
+    const maxBookings = parseInt(form.max_bookings_per_slot, 10)
+    if (!Number.isFinite(maxBookings) || maxBookings < 1) {
+      setError('Max parallel bookings per slot must be at least 1')
+      return
+    }
 
     setSaving(true)
 
@@ -157,6 +165,7 @@ export default function ServicesPage() {
       category: form.category || null,
       is_active: form.is_active,
       staff_ids: staffIds,
+      max_bookings_per_slot: maxBookings,
       meta,
     }
 
@@ -326,6 +335,10 @@ export default function ServicesPage() {
       accessor: (s) => `${s.duration_minutes} min`,
     },
     {
+      header: 'Per slot',
+      accessor: (s) => s.max_bookings_per_slot ?? 1,
+    },
+    {
       header: 'Category',
       accessor: (s) => s.category ? (
         <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{s.category}</span>
@@ -384,6 +397,7 @@ export default function ServicesPage() {
             <span>{service.duration_minutes} min</span>
             {service.category && <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{service.category}</span>}
             {service.staff_ids?.length > 0 && <span>{service.staff_ids.length} staff</span>}
+            {service.max_bookings_per_slot > 1 && <span>{service.max_bookings_per_slot} per slot</span>}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -523,6 +537,21 @@ export default function ServicesPage() {
               className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="e.g. Haircuts, Facials"
             />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Max parallel bookings per slot</label>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              required
+              value={form.max_bookings_per_slot}
+              onChange={(e) => setForm({ ...form, max_bookings_per_slot: e.target.value })}
+              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              How many customers can book the same time slot (1 for a solo practitioner, 3+ for group or multi-staff appointments).
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <input

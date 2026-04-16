@@ -78,11 +78,18 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { name, description, price, duration_minutes, category, is_active, staff_ids, meta } = body
+  const { name, description, price, duration_minutes, category, is_active, staff_ids, meta, max_bookings_per_slot } = body
 
   if (!name || price == null || !duration_minutes) {
     return NextResponse.json(
       { error: 'Name, price, and duration are required' },
+      { status: 400 }
+    )
+  }
+
+  if (max_bookings_per_slot != null && (!Number.isInteger(max_bookings_per_slot) || max_bookings_per_slot < 1)) {
+    return NextResponse.json(
+      { error: 'max_bookings_per_slot must be a positive integer' },
       { status: 400 }
     )
   }
@@ -99,6 +106,7 @@ export async function POST(request: NextRequest) {
       is_active: is_active ?? true,
       staff_ids: staff_ids ?? [],
       meta: meta ?? {},
+      ...(max_bookings_per_slot != null ? { max_bookings_per_slot } : {}),
     })
     .select()
     .single()
@@ -120,7 +128,7 @@ export async function PUT(request: NextRequest) {
   }
 
   const body = await request.json()
-  const { id, name, description, price, duration_minutes, category, is_active, staff_ids, meta } = body
+  const { id, name, description, price, duration_minutes, category, is_active, staff_ids, meta, max_bookings_per_slot } = body
 
   if (!id) {
     return NextResponse.json({ error: 'Service id is required' }, { status: 400 })
@@ -129,6 +137,13 @@ export async function PUT(request: NextRequest) {
   if (!name || price == null || !duration_minutes) {
     return NextResponse.json(
       { error: 'Name, price, and duration are required' },
+      { status: 400 }
+    )
+  }
+
+  if (max_bookings_per_slot != null && (!Number.isInteger(max_bookings_per_slot) || max_bookings_per_slot < 1)) {
+    return NextResponse.json(
+      { error: 'max_bookings_per_slot must be a positive integer' },
       { status: 400 }
     )
   }
@@ -144,6 +159,7 @@ export async function PUT(request: NextRequest) {
       is_active: is_active ?? true,
       staff_ids: staff_ids ?? [],
       meta: meta ?? {},
+      ...(max_bookings_per_slot != null ? { max_bookings_per_slot } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq('id', id)

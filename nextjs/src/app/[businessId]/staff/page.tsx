@@ -3,8 +3,8 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import { confirmDialog } from '@/components/confirmDialog'
-import { TableView, ListView, ViewToggle, Modal } from '@/components/dashboard'
-import type { ColumnDef, ActionDef, FilterDef, PaginationInfo } from '@/components/dashboard'
+import { TableView, ListView, ViewToggle, Modal, DayHoursEditor, emptyDaySlots, groupRowsByDay, flattenDaysToRows } from '@/components/dashboard'
+import type { ColumnDef, ActionDef, FilterDef, PaginationInfo, DaySlots } from '@/components/dashboard'
 
 interface StaffMember {
   id: string
@@ -30,22 +30,10 @@ interface StaffCustomField {
   sort_order: number
 }
 
-interface StaffHoursEntry {
-  day_of_week: number
-  is_closed: boolean
-  open_time: string | null
-  close_time: string | null
-}
-
-const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-
-function generateEmptyHours(): StaffHoursEntry[] {
-  return Array.from({ length: 7 }, (_, i) => ({
-    day_of_week: i,
-    is_closed: false,
-    open_time: null,
-    close_time: null,
-  }))
+function generateEmptyHours(): DaySlots[] {
+  // Staff hours default to "closed/unavailable" on every day until the owner fills them in —
+  // the staff form hint is "Leave empty to follow business hours".
+  return emptyDaySlots()
 }
 
 function toFieldKey(label: string): string {
@@ -80,7 +68,7 @@ export default function StaffPage() {
   const [customFields, setCustomFields] = useState<StaffCustomField[]>([])
 
   // Staff hours
-  const [staffHours, setStaffHours] = useState<StaffHoursEntry[]>(generateEmptyHours())
+  const [staffHours, setStaffHours] = useState<DaySlots[]>(generateEmptyHours())
   const [savingHours, setSavingHours] = useState(false)
 
   // Custom Fields Manager state
@@ -160,8 +148,12 @@ export default function StaffPage() {
     fetch(`/api/business/staff-hours?staffId=${member.id}`)
       .then(async (res) => {
         if (res.ok) {
-          const hours = await res.json()
-          setStaffHours(hours.length > 0 ? hours : generateEmptyHours())
+          const rows = await res.json()
+          setStaffHours(
+            Array.isArray(rows) && rows.length > 0
+              ? groupRowsByDay(rows, generateEmptyHours())
+              : generateEmptyHours(),
+          )
         }
       })
 
@@ -238,11 +230,33 @@ export default function StaffPage() {
 
   async function handleSaveHours() {
     if (!editingId) return
+
+    for (const day of staffHours) {
+      if (day.is_closed) continue
+      for (const slot of day.slots) {
+        if (!slot.open_time || !slot.close_time) {
+          setError('Each working slot must have both an open and close time.')
+          return
+        }
+        if (slot.open_time >= slot.close_time) {
+          setError('Each working slot\u2019s open time must be before its close time.')
+          return
+        }
+      }
+    }
+
+    setError('')
     setSavingHours(true)
+
+    // If every day is closed with no slots, send an empty array — backend treats that
+    // as "staff follows business hours" and deletes all rows for this staff member.
+    const allEmpty = staffHours.every((d) => d.is_closed && d.slots.length === 0)
+    const payload = allEmpty ? [] : flattenDaysToRows(staffHours)
+
     const res = await fetch(`/api/business/staff-hours?staffId=${editingId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hours: staffHours }),
+      body: JSON.stringify({ hours: payload }),
     })
     if (!res.ok) {
       setError('Failed to save working hours')
@@ -636,60 +650,14 @@ export default function StaffPage() {
             <div>
               <div className="border-t border-gray-100 pt-4">
                 <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Working Hours</p>
-                <p className="text-xs text-gray-500 mb-3">Leave empty to follow general business hours</p>
-                <div className="space-y-3">
-                  {DAY_NAMES.map((day, i) => {
-                    const entry = staffHours[i] || { day_of_week: i, is_closed: false, open_time: null, close_time: null }
-                    return (
-                      <div key={i} className="border border-gray-200 rounded-lg p-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-gray-700">{day}</span>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={entry.is_closed}
-                              onChange={(e) => {
-                                const updated = [...staffHours]
-                                updated[i] = { ...entry, is_closed: e.target.checked }
-                                setStaffHours(updated)
-                              }}
-                              className="w-4 h-4 rounded border-gray-300 text-blue-600"
-                            />
-                            <span className="text-sm text-gray-600">Unavailable</span>
-                          </label>
-                        </div>
-                        {!entry.is_closed && (
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <input
-                                type="time"
-                                value={entry.open_time || ''}
-                                onChange={(e) => {
-                                  const updated = [...staffHours]
-                                  updated[i] = { ...entry, open_time: e.target.value }
-                                  setStaffHours(updated)
-                                }}
-                                className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm"
-                              />
-                            </div>
-                            <div>
-                              <input
-                                type="time"
-                                value={entry.close_time || ''}
-                                onChange={(e) => {
-                                  const updated = [...staffHours]
-                                  updated[i] = { ...entry, close_time: e.target.value }
-                                  setStaffHours(updated)
-                                }}
-                                className="w-full border border-gray-200 rounded px-3 py-1.5 text-sm"
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
+                <DayHoursEditor
+                  hours={staffHours}
+                  onChange={setStaffHours}
+                  closedLabel="Unavailable"
+                  openLabel="Available"
+                  hint="Leave all days unavailable to follow general business hours. Add multiple slots for split shifts or breaks."
+                  compact
+                />
                 <button
                   type="button"
                   onClick={handleSaveHours}
