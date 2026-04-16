@@ -16,6 +16,64 @@
   var sessionEnded = false;
   var sessionEndReason = null; // 'ended' or 'expired'
 
+  // --- Appearance config (populated from API, defaults here) ---
+  var cfg = {
+    tooltip_enabled: true,
+    tooltip_text: 'Ask us anything \u2014 we reply instantly 24/7',
+    tooltip_bg_color: '#FFFFFF',
+    tooltip_text_color: '#1F2937',
+    tooltip_position: 'side',
+    intent_title: 'How can we help you?',
+    intent_description: 'Select an option to get started',
+    intent_color_1: '#3B82F6',
+    intent_color_2: '#10B981',
+    intent_color_3: '#F59E0B',
+    intent_border_radius: 'rounded',
+    avatar_enabled: true,
+    avatar_selection: 'robot',
+    header_show_status: true,
+    header_title: 'Chat with us',
+    header_subtitle: 'We reply instantly',
+    typing_indicator_style: 'animated_dots',
+    session_ended_enabled: true,
+    session_ended_icon: '\uD83D\uDC4B',
+    session_ended_title: 'Chat Ended',
+    session_ended_message: 'Thank you for reaching out! We hope we answered all your questions.',
+    session_expired_enabled: true,
+    session_expired_icon: '\u23F0',
+    session_expired_title: 'Session Expired',
+    session_expired_message: 'Your session ended due to inactivity. Start a new chat anytime.',
+    feedback_enabled: true,
+    feedback_prompt_title: 'How was your experience?',
+    feedback_note_placeholder: 'Leave a message for the business (optional)',
+  };
+
+  // Avatar map
+  var AVATAR_MAP = {
+    robot: '\uD83E\uDD16',
+    wave: '\uD83D\uDC4B',
+    sparkles: '\u2728',
+    headset: '\uD83C\uDFA7',
+    star: '\u2B50',
+    heart: '\u2764\uFE0F',
+    lightning: '\u26A1',
+    speech: '\uD83D\uDCAC',
+    bulb: '\uD83D\uDCA1',
+    check: '\u2705',
+    smile: '\uD83D\uDE0A',
+    rocket: '\uD83D\uDE80',
+  };
+
+  function getAvatarEmoji() {
+    return AVATAR_MAP[cfg.avatar_selection] || AVATAR_MAP.robot;
+  }
+
+  function getBorderRadiusValue() {
+    if (cfg.intent_border_radius === 'sharp') return '4px';
+    if (cfg.intent_border_radius === 'pill') return '28px';
+    return '14px'; // rounded (default)
+  }
+
   // --- Inactivity timer ---
   var inactivityTimer = null;
   var INACTIVITY_TIMEOUT = 10 * 60 * 1000; // 10 minutes
@@ -51,20 +109,25 @@
     // Zoom animation — gentle scale after pulse ends (3 × 1.1s = 3.3s delay)
     '@keyframes ai-widget-zoom { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }',
     '#ai-widget-btn { animation: ai-widget-zoom 3.5s ease-in-out 3.3s infinite; }',
-    // Tooltip
+    // Tooltip — side position (default)
     '@keyframes ai-widget-tooltip-in { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: translateX(0); } }',
-    '#ai-widget-tooltip { position: fixed; bottom: 28px; right: 84px; background: #fff; border-radius: 10px; padding: 10px 13px; box-shadow: 0 4px 16px rgba(0,0,0,0.14); font-size: 13px; color: #1f2937; max-width: 220px; line-height: 1.4; display: flex; align-items: flex-start; gap: 10px; animation: ai-widget-tooltip-in 0.3s ease 3s both; }',
-    '#ai-widget-tooltip::after { content: ""; position: absolute; right: -7px; top: 50%; transform: translateY(-50%); border: 7px solid transparent; border-right: none; border-left-color: #fff; }',
+    '@keyframes ai-widget-tooltip-in-above { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }',
+    '#ai-widget-tooltip { position: fixed; border-radius: 10px; padding: 10px 13px; box-shadow: 0 4px 16px rgba(0,0,0,0.14); font-size: 13px; max-width: 220px; line-height: 1.4; display: flex; align-items: flex-start; gap: 10px; }',
+    '#ai-widget-tooltip.tooltip-side { bottom: 28px; right: 84px; animation: ai-widget-tooltip-in 0.3s ease 3s both; }',
+    '#ai-widget-tooltip.tooltip-side::after { content: ""; position: absolute; right: -7px; top: 50%; transform: translateY(-50%); border: 7px solid transparent; border-right: none; }',
+    '#ai-widget-tooltip.tooltip-above { bottom: 82px; right: 20px; animation: ai-widget-tooltip-in-above 0.3s ease 3s both; }',
+    '#ai-widget-tooltip.tooltip-above::after { content: ""; position: absolute; bottom: -7px; right: 20px; border: 7px solid transparent; border-bottom: none; }',
     '#ai-widget-tooltip-text { flex: 1; }',
-    '#ai-widget-tooltip-close { background: none; border: none; cursor: pointer; color: #9ca3af; font-size: 16px; padding: 0; flex-shrink: 0; line-height: 1; }',
-    '#ai-widget-tooltip-close:hover { color: #374151; }',
+    '#ai-widget-tooltip-close { background: none; border: none; cursor: pointer; font-size: 16px; padding: 0; flex-shrink: 0; line-height: 1; opacity: 0.6; }',
+    '#ai-widget-tooltip-close:hover { opacity: 1; }',
     // Popup shell
     '#ai-widget-popup { position: fixed; bottom: 84px; right: 20px; width: 348px; max-width: calc(100vw - 40px); height: 520px; max-height: calc(100vh - 110px); background: #fff; border-radius: 16px; box-shadow: 0 12px 40px rgba(0,0,0,0.16); display: flex; flex-direction: column; overflow: hidden; }',
     // Header
     '#ai-widget-header { background: var(--ai-widget-primary, #2563eb); color: #fff; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }',
     '#ai-widget-header-info { display: flex; flex-direction: column; gap: 2px; }',
     '#ai-widget-title { font-size: 15px; font-weight: 700; line-height: 1.2; }',
-    '#ai-widget-header-sub { font-size: 11px; opacity: 0.8; }',
+    '#ai-widget-header-sub { font-size: 11px; opacity: 0.8; display: flex; align-items: center; gap: 4px; }',
+    '#ai-widget-status-dot { width: 6px; height: 6px; border-radius: 50%; background: #4ade80; display: inline-block; }',
     '#ai-widget-close { background: rgba(255,255,255,0.15); border: none; color: #fff; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background 0.15s; }',
     '#ai-widget-close:hover { background: rgba(255,255,255,0.25); }',
     // Body
@@ -77,6 +140,12 @@
     '.ai-widget-msg-avatar { width: 26px; height: 26px; border-radius: 50%; background: var(--ai-widget-primary, #2563eb); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 13px; }',
     '.ai-widget-msg-user { background: var(--ai-widget-primary, #2563eb); color: #fff; padding: 9px 13px; border-radius: 16px 16px 4px 16px; max-width: 78%; word-wrap: break-word; font-size: 13.5px; line-height: 1.5; }',
     '.ai-widget-msg-bot { background: #f3f4f6; color: #1f2937; padding: 9px 13px; border-radius: 16px 16px 16px 4px; max-width: 78%; word-wrap: break-word; font-size: 13.5px; line-height: 1.5; white-space: pre-wrap; }',
+    // Typing indicator
+    '@keyframes ai-widget-dot-bounce { 0%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-4px); } }',
+    '.ai-widget-typing-dots { display: inline-flex; gap: 3px; align-items: center; padding: 2px 0; }',
+    '.ai-widget-typing-dots span { width: 6px; height: 6px; border-radius: 50%; background: #9ca3af; display: inline-block; animation: ai-widget-dot-bounce 1.2s ease-in-out infinite; }',
+    '.ai-widget-typing-dots span:nth-child(2) { animation-delay: 0.15s; }',
+    '.ai-widget-typing-dots span:nth-child(3) { animation-delay: 0.3s; }',
     // Input row — pill input + circular icon button
     '#ai-widget-input-row { padding: 10px 12px; display: flex; gap: 8px; border-top: 1px solid #f0f0f0; flex-shrink: 0; align-items: center; }',
     '#ai-widget-input { flex: 1; border: 1.5px solid #e5e7eb; border-radius: 20px; padding: 8px 14px; font-size: 13.5px; outline: none; font-family: inherit; background: #f9fafb; transition: border-color 0.15s, background 0.15s; }',
@@ -90,7 +159,7 @@
     '.ai-widget-intent-heading { text-align: center; padding-bottom: 6px; }',
     '.ai-widget-intent-label { font-size: 17px; font-weight: 700; color: #111827; display: block; }',
     '.ai-widget-intent-sublabel { font-size: 12px; color: #9ca3af; margin-top: 4px; display: block; }',
-    '.ai-widget-intent-btn { display: flex; align-items: center; gap: 14px; width: 100%; padding: 15px 16px; border: none; border-radius: 14px; color: #fff; font-family: inherit; cursor: pointer; transition: transform 0.12s, box-shadow 0.12s; text-align: left; }',
+    '.ai-widget-intent-btn { display: flex; align-items: center; gap: 14px; width: 100%; padding: 15px 16px; border: none; color: #fff; font-family: inherit; cursor: pointer; transition: transform 0.12s, box-shadow 0.12s; text-align: left; }',
     '.ai-widget-intent-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,0,0,0.15); }',
     '.ai-widget-intent-btn.selected { outline: 3px solid rgba(255,255,255,0.7); outline-offset: 2px; }',
     '.ai-widget-intent-icon-wrap { width: 40px; height: 40px; border-radius: 10px; background: rgba(255,255,255,0.22); display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }',
@@ -115,7 +184,14 @@
     '.ai-widget-form-error { font-size: 11.5px; color: #ef4444; margin-top: 3px; }',
     '.ai-widget-form-submit { display: block; width: 100%; margin-top: 20px; padding: 12px 16px; border: none; border-radius: 10px; background: var(--ai-widget-primary, #2563eb); color: #fff; font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer; transition: opacity 0.15s; }',
     '.ai-widget-form-submit:hover { opacity: 0.9; }',
-    '.ai-widget-form-submit:disabled { opacity: 0.5; cursor: not-allowed; }'
+    '.ai-widget-form-submit:disabled { opacity: 0.5; cursor: not-allowed; }',
+    // Session end screen
+    '.ai-widget-session-end { padding: 32px 20px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; }',
+    '.ai-widget-session-end-icon { font-size: 36px; }',
+    '.ai-widget-session-end-title { font-size: 16px; font-weight: 700; color: #111827; }',
+    '.ai-widget-session-end-msg { font-size: 13px; color: #6b7280; line-height: 1.5; }',
+    '.ai-widget-session-end-btn { margin-top: 8px; padding: 10px 20px; border: none; border-radius: 8px; background: var(--ai-widget-primary, #2563eb); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; transition: opacity 0.15s; }',
+    '.ai-widget-session-end-btn:hover { opacity: 0.9; }'
   ].join('\n');
   document.head.appendChild(style);
 
@@ -128,7 +204,7 @@
     '</button>',
     '<div id="ai-widget-popup" aria-label="Chat with us" role="dialog" style="display:none">',
       '<div id="ai-widget-header">',
-        '<div id="ai-widget-header-info"><span id="ai-widget-title">Chat with us</span><span id="ai-widget-header-sub">We reply instantly</span></div>',
+        '<div id="ai-widget-header-info"><span id="ai-widget-title">Chat with us</span><span id="ai-widget-header-sub"><span id="ai-widget-status-dot"></span> We reply instantly</span></div>',
         '<button id="ai-widget-close" aria-label="Close chat">\u2715</button>',
       '</div>',
       '<div id="ai-widget-body">',
@@ -158,10 +234,10 @@
     var bubble = document.createElement('div');
     bubble.className = role === 'user' ? 'ai-widget-msg-user' : 'ai-widget-msg-bot';
     bubble.textContent = text;
-    if (role === 'bot') {
+    if (role === 'bot' && cfg.avatar_enabled) {
       var avatar = document.createElement('div');
       avatar.className = 'ai-widget-msg-avatar';
-      avatar.textContent = '\uD83E\uDD16';
+      avatar.textContent = getAvatarEmoji();
       row.appendChild(avatar);
     }
     row.appendChild(bubble);
@@ -192,6 +268,27 @@
     document.getElementById('ai-widget-input-row').style.display = 'none';
   }
 
+  // --- Apply header config ---
+  function applyHeaderConfig() {
+    var titleEl = document.getElementById('ai-widget-title');
+    var subEl = document.getElementById('ai-widget-header-sub');
+    var dotEl = document.getElementById('ai-widget-status-dot');
+
+    if (titleEl) titleEl.textContent = cfg.header_title;
+    if (subEl) {
+      if (cfg.header_show_status && dotEl) {
+        dotEl.style.display = 'inline-block';
+      } else if (dotEl) {
+        dotEl.style.display = 'none';
+      }
+      // Set subtitle text (keep the dot element)
+      var textNode = subEl.lastChild;
+      if (textNode && textNode.nodeType === 3) {
+        textNode.textContent = ' ' + cfg.header_subtitle;
+      }
+    }
+  }
+
   // --- 10-minute resume check ---
   function canResumeSession() {
     var lastMsgTime = localStorage.getItem(lastMsgTimeKey);
@@ -207,28 +304,34 @@
     if (existing) existing.remove();
     existing = document.getElementById('ai-widget-prechat');
     if (existing) existing.remove();
+    // Remove any session-end screen
+    existing = document.getElementById('ai-widget-session-end');
+    if (existing) existing.remove();
 
     var lastIntent = localStorage.getItem(lastIntentKey);
+    var borderRadius = getBorderRadiusValue();
+
+    var intentColors = [cfg.intent_color_1, cfg.intent_color_2, cfg.intent_color_3];
 
     var wrap = document.createElement('div');
     wrap.id = 'ai-widget-intent';
     wrap.className = 'ai-widget-intent-wrap';
     wrap.innerHTML = [
       '<div class="ai-widget-intent-heading">',
-        '<span class="ai-widget-intent-label">How can we help you?</span>',
-        '<span class="ai-widget-intent-sublabel">Select an option to get started</span>',
+        '<span class="ai-widget-intent-label">' + escapeHtml(cfg.intent_title) + '</span>',
+        '<span class="ai-widget-intent-sublabel">' + escapeHtml(cfg.intent_description) + '</span>',
       '</div>',
-      '<button class="ai-widget-intent-btn" data-intent="basic_information" style="background:#3b82f6">',
+      '<button class="ai-widget-intent-btn" data-intent="basic_information" style="background:' + intentColors[0] + ';border-radius:' + borderRadius + '">',
         '<span class="ai-widget-intent-icon-wrap">\uD83D\uDCAC</span>',
         '<span class="ai-widget-intent-text"><span class="ai-widget-intent-name">Basic Information</span><span class="ai-widget-intent-desc">Ask questions about our services</span></span>',
         '<span class="ai-widget-intent-chevron">\u203A</span>',
       '</button>',
-      '<button class="ai-widget-intent-btn" data-intent="book_appointment" style="background:#10b981">',
+      '<button class="ai-widget-intent-btn" data-intent="book_appointment" style="background:' + intentColors[1] + ';border-radius:' + borderRadius + '">',
         '<span class="ai-widget-intent-icon-wrap">\uD83D\uDCC5</span>',
         '<span class="ai-widget-intent-text"><span class="ai-widget-intent-name">Book an Appointment</span><span class="ai-widget-intent-desc">Schedule a visit with us</span></span>',
         '<span class="ai-widget-intent-chevron">\u203A</span>',
       '</button>',
-      '<button class="ai-widget-intent-btn" data-intent="appointment_details" style="background:#f59e0b">',
+      '<button class="ai-widget-intent-btn" data-intent="appointment_details" style="background:' + intentColors[2] + ';border-radius:' + borderRadius + '">',
         '<span class="ai-widget-intent-icon-wrap">\uD83D\uDD0D</span>',
         '<span class="ai-widget-intent-text"><span class="ai-widget-intent-name">Appointment Details</span><span class="ai-widget-intent-desc">Check or manage an existing booking</span></span>',
         '<span class="ai-widget-intent-chevron">\u203A</span>',
@@ -257,6 +360,13 @@
         }
       });
     });
+  }
+
+  // --- Escape HTML helper ---
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
   }
 
   // --- Pre-chat Form ---
@@ -393,6 +503,8 @@
     if (intentEl) intentEl.remove();
     var prechatEl = document.getElementById('ai-widget-prechat');
     if (prechatEl) prechatEl.remove();
+    var endEl = document.getElementById('ai-widget-session-end');
+    if (endEl) endEl.remove();
     showChatUI();
     // Show welcome message if not already shown
     if (!welcomeShown) {
@@ -419,15 +531,65 @@
       root.style.setProperty('--ai-widget-primary', primaryColor);
       welcomeMessage = config.welcome_message || welcomeMessage;
 
+      // Apply all appearance config
+      cfg.tooltip_enabled = config.tooltip_enabled ?? cfg.tooltip_enabled;
+      cfg.tooltip_text = config.tooltip_text || cfg.tooltip_text;
+      cfg.tooltip_bg_color = config.tooltip_bg_color || cfg.tooltip_bg_color;
+      cfg.tooltip_text_color = config.tooltip_text_color || cfg.tooltip_text_color;
+      cfg.tooltip_position = config.tooltip_position || cfg.tooltip_position;
+      cfg.intent_title = config.intent_title || cfg.intent_title;
+      cfg.intent_description = config.intent_description || cfg.intent_description;
+      cfg.intent_color_1 = config.intent_color_1 || cfg.intent_color_1;
+      cfg.intent_color_2 = config.intent_color_2 || cfg.intent_color_2;
+      cfg.intent_color_3 = config.intent_color_3 || cfg.intent_color_3;
+      cfg.intent_border_radius = config.intent_border_radius || cfg.intent_border_radius;
+      cfg.avatar_enabled = config.avatar_enabled ?? cfg.avatar_enabled;
+      cfg.avatar_selection = config.avatar_selection || cfg.avatar_selection;
+      cfg.header_show_status = config.header_show_status ?? cfg.header_show_status;
+      cfg.header_title = config.header_title || cfg.header_title;
+      cfg.header_subtitle = config.header_subtitle || cfg.header_subtitle;
+      cfg.typing_indicator_style = config.typing_indicator_style || cfg.typing_indicator_style;
+      cfg.session_ended_enabled = config.session_ended_enabled ?? cfg.session_ended_enabled;
+      cfg.session_ended_icon = config.session_ended_icon || cfg.session_ended_icon;
+      cfg.session_ended_title = config.session_ended_title || cfg.session_ended_title;
+      cfg.session_ended_message = config.session_ended_message || cfg.session_ended_message;
+      cfg.session_expired_enabled = config.session_expired_enabled ?? cfg.session_expired_enabled;
+      cfg.session_expired_icon = config.session_expired_icon || cfg.session_expired_icon;
+      cfg.session_expired_title = config.session_expired_title || cfg.session_expired_title;
+      cfg.session_expired_message = config.session_expired_message || cfg.session_expired_message;
+      cfg.feedback_enabled = config.feedback_enabled ?? cfg.feedback_enabled;
+      cfg.feedback_prompt_title = config.feedback_prompt_title || cfg.feedback_prompt_title;
+      cfg.feedback_note_placeholder = config.feedback_note_placeholder || cfg.feedback_note_placeholder;
+
+      // Apply header config
+      applyHeaderConfig();
+
       // Inject tooltip if enabled and not dismissed
       var tooltipDismissed = sessionStorage.getItem(tooltipDismissedKey);
-      if (config.tooltip_enabled && !tooltipDismissed) {
+      if (cfg.tooltip_enabled && !tooltipDismissed) {
         var tip = document.createElement('div');
         tip.id = 'ai-widget-tooltip';
-        var tipText = config.tooltip_text || 'Ask us anything \u2014 we reply instantly 24/7';
-        tip.innerHTML = '<span id="ai-widget-tooltip-text">' + tipText + '</span>'
-          + '<button id="ai-widget-tooltip-close" aria-label="Dismiss">\u00D7</button>';
+        tip.className = cfg.tooltip_position === 'above' ? 'tooltip-above' : 'tooltip-side';
+        tip.style.backgroundColor = cfg.tooltip_bg_color;
+        tip.style.color = cfg.tooltip_text_color;
+        tip.innerHTML = '<span id="ai-widget-tooltip-text">' + escapeHtml(cfg.tooltip_text) + '</span>'
+          + '<button id="ai-widget-tooltip-close" aria-label="Dismiss" style="color:' + cfg.tooltip_text_color + '">\u00D7</button>';
+        // Set the arrow color to match tooltip background
         root.appendChild(tip);
+        // Style the arrow after appending
+        var arrow = tip.querySelector('::after');
+        if (cfg.tooltip_position === 'above') {
+          tip.style.setProperty('--arrow-color', cfg.tooltip_bg_color);
+        }
+        // Apply arrow color via inline style on a real element
+        var arrowStyle = document.createElement('style');
+        if (cfg.tooltip_position === 'above') {
+          arrowStyle.textContent = '#ai-widget-tooltip.tooltip-above::after { border-top-color: ' + cfg.tooltip_bg_color + '; }';
+        } else {
+          arrowStyle.textContent = '#ai-widget-tooltip.tooltip-side::after { border-left-color: ' + cfg.tooltip_bg_color + '; }';
+        }
+        document.head.appendChild(arrowStyle);
+
         document.getElementById('ai-widget-tooltip-close').addEventListener('click', function() {
           sessionStorage.setItem(tooltipDismissedKey, '1');
           tip.remove();
@@ -455,7 +617,31 @@
     if (!userMsg || sessionEnded) return;
 
     addMessage('user', userMsg);
-    var botBubble = addMessage('bot', '');
+
+    // Show typing indicator based on config
+    var typingBubble = null;
+    if (cfg.typing_indicator_style !== 'disabled') {
+      var typingRow = document.createElement('div');
+      typingRow.className = 'ai-widget-msg-row bot-row';
+      typingRow.id = 'ai-widget-typing';
+      if (cfg.avatar_enabled) {
+        var typingAvatar = document.createElement('div');
+        typingAvatar.className = 'ai-widget-msg-avatar';
+        typingAvatar.textContent = getAvatarEmoji();
+        typingRow.appendChild(typingAvatar);
+      }
+      typingBubble = document.createElement('div');
+      typingBubble.className = 'ai-widget-msg-bot';
+      if (cfg.typing_indicator_style === 'animated_dots') {
+        typingBubble.innerHTML = '<span class="ai-widget-typing-dots"><span></span><span></span><span></span></span>';
+      } else {
+        typingBubble.textContent = 'AI is typing...';
+      }
+      typingRow.appendChild(typingBubble);
+      messagesEl.appendChild(typingRow);
+      scrollToBottom();
+    }
+
     setInputDisabled(true);
 
     fetch(API_BASE + '/api/widget/' + businessId + '/chat', {
@@ -471,6 +657,12 @@
       if (!response.ok) {
         throw new Error('Request failed');
       }
+
+      // Remove typing indicator
+      var typingEl = document.getElementById('ai-widget-typing');
+      if (typingEl) typingEl.remove();
+
+      var botBubble = addMessage('bot', '');
       var reader = response.body.getReader();
       var decoder = new TextDecoder();
       var buffer = '';
@@ -500,7 +692,6 @@
                   }
                 } else if (data.type === 'end_conversation') {
                   // AI has detected end of conversation — strip any [END_CONVERSATION] marker
-                  // that leaked into the bubble (marker may span multiple tokens)
                   if (botBubble) {
                     botBubble.textContent = botBubble.textContent.replace(/\s*\[END_CONVERSATION\]\s*/g, '').trim();
                   }
@@ -519,13 +710,17 @@
           });
           read();
         }).catch(function() {
+          var typingEl = document.getElementById('ai-widget-typing');
+          if (typingEl) typingEl.remove();
           botBubble.textContent = 'Sorry, something went wrong. Please try again.';
           setInputDisabled(false);
         });
       }
       read();
     }).catch(function() {
-      botBubble.textContent = 'Sorry, something went wrong. Please try again.';
+      var typingEl = document.getElementById('ai-widget-typing');
+      if (typingEl) typingEl.remove();
+      addMessage('bot', 'Sorry, something went wrong. Please try again.');
       setInputDisabled(false);
     });
   }
@@ -564,8 +759,19 @@
         feedback_note: null
       })
     }).catch(function() {});
-    addMessage('bot', 'This conversation has been automatically closed due to inactivity. Feel free to start a new conversation anytime.');
-    transitionToEndingState('expired');
+
+    if (cfg.session_expired_enabled) {
+      transitionToEndingState('expired');
+    } else {
+      // Just disable input and show a simple message
+      addMessage('bot', 'This conversation has been automatically closed due to inactivity.');
+      sessionEnded = true;
+      sessionEndReason = 'expired';
+      stopInactivityTimer();
+      setInputDisabled(true);
+      document.getElementById('ai-widget-input-row').style.display = 'none';
+      showNewConversationButton();
+    }
   }
 
   // --- Session ending state ---
@@ -575,9 +781,31 @@
     stopInactivityTimer();
     setInputDisabled(true);
     document.getElementById('ai-widget-input-row').style.display = 'none';
-    setTimeout(function() {
-      showFeedbackPrompt(reason);
-    }, reason === 'expired' ? 1000 : 500);
+
+    var delay = reason === 'expired' ? 1000 : 500;
+
+    // Check if feedback is enabled
+    if (cfg.feedback_enabled) {
+      setTimeout(function() {
+        showFeedbackPrompt(reason);
+      }, delay);
+    } else {
+      // Skip feedback, go straight to ending message or session end screen
+      setTimeout(function() {
+        // Fire-and-forget session end
+        fetch(API_BASE + '/api/widget/' + businessId + '/session/end', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: sessionId,
+            status: reason || 'ended',
+            feedback_rating: null,
+            feedback_note: null
+          })
+        }).catch(function() {});
+        showEndingMessage(reason);
+      }, delay);
+    }
   }
 
   function showFeedbackPrompt(reason) {
@@ -587,7 +815,7 @@
 
     var feedbackTitle = document.createElement('div');
     feedbackTitle.style.cssText = 'font-size: 15px; font-weight: 700; color: #1f2937; text-align: center;';
-    feedbackTitle.textContent = 'How was your experience?';
+    feedbackTitle.textContent = cfg.feedback_prompt_title;
 
     var starsContainer = document.createElement('div');
     starsContainer.style.cssText = 'display: flex; gap: 12px; justify-content: center;';
@@ -629,7 +857,7 @@
 
     var noteField = document.createElement('textarea');
     noteField.id = 'ai-widget-feedback-note';
-    noteField.placeholder = 'Leave a message for the business (optional)';
+    noteField.placeholder = cfg.feedback_note_placeholder;
     noteField.style.cssText = 'width: 100%; border: 1.5px solid #e5e7eb; border-radius: 8px; padding: 9px 12px; font-size: 13.5px; font-family: inherit; outline: none; resize: none; height: 80px; background: #f9fafb; box-sizing: border-box;';
 
     var buttonContainer = document.createElement('div');
@@ -654,8 +882,8 @@
           feedback_note: feedbackNote || null
         })
       })
-        .then(function() { showEndingMessage(); })
-        .catch(function() { showEndingMessage(); });
+        .then(function() { showEndingMessage(sessionEndReason); })
+        .catch(function() { showEndingMessage(sessionEndReason); });
     });
 
     var skipBtn = document.createElement('button');
@@ -673,8 +901,8 @@
           feedback_note: null
         })
       })
-        .then(function() { showEndingMessage(); })
-        .catch(function() { showEndingMessage(); });
+        .then(function() { showEndingMessage(sessionEndReason); })
+        .catch(function() { showEndingMessage(sessionEndReason); });
     });
 
     buttonContainer.appendChild(submitFeedbackBtn);
@@ -690,15 +918,56 @@
     scrollToBottom();
   }
 
-  function showEndingMessage() {
+  function showEndingMessage(reason) {
     // Remove feedback form
     var feedbackEl = document.getElementById('ai-widget-feedback');
     if (feedbackEl) feedbackEl.remove();
 
-    // Show thank you message in chat
-    addMessage('bot', 'Thank you for your feedback. Have a great day!');
+    // Determine if we should show the session-end screen
+    var showScreen = (reason === 'expired' && cfg.session_expired_enabled) ||
+                     (reason !== 'expired' && cfg.session_ended_enabled);
 
-    // Add "Start New Conversation" button
+    if (showScreen) {
+      showSessionEndScreen(reason);
+    } else {
+      // Simple fallback — just show a thank you message and new conversation button
+      addMessage('bot', 'Thank you for your feedback. Have a great day!');
+      showNewConversationButton();
+    }
+  }
+
+  function showSessionEndScreen(reason) {
+    // Hide messages and input
+    messagesEl.style.display = 'none';
+    document.getElementById('ai-widget-input-row').style.display = 'none';
+
+    // Remove existing end screen
+    var existing = document.getElementById('ai-widget-session-end');
+    if (existing) existing.remove();
+
+    var isExpired = reason === 'expired';
+    var icon = isExpired ? cfg.session_expired_icon : cfg.session_ended_icon;
+    var title = isExpired ? cfg.session_expired_title : cfg.session_ended_title;
+    var message = isExpired ? cfg.session_expired_message : cfg.session_ended_message;
+
+    var endScreen = document.createElement('div');
+    endScreen.id = 'ai-widget-session-end';
+    endScreen.className = 'ai-widget-session-end';
+    endScreen.innerHTML = [
+      '<div class="ai-widget-session-end-icon">' + escapeHtml(icon) + '</div>',
+      '<div class="ai-widget-session-end-title">' + escapeHtml(title) + '</div>',
+      '<div class="ai-widget-session-end-msg">' + escapeHtml(message) + '</div>',
+      '<button class="ai-widget-session-end-btn" id="ai-widget-new-conv-btn">Start New Conversation</button>',
+    ].join('');
+
+    bodyEl.insertBefore(endScreen, messagesEl);
+
+    document.getElementById('ai-widget-new-conv-btn').addEventListener('click', function() {
+      startNewConversation();
+    });
+  }
+
+  function showNewConversationButton() {
     var newConvRow = document.createElement('div');
     newConvRow.id = 'ai-widget-new-conv';
     newConvRow.style.cssText = 'padding: 12px 14px; text-align: center;';
@@ -732,6 +1001,8 @@
     // Remove any ending UI
     var newConvEl = document.getElementById('ai-widget-new-conv');
     if (newConvEl) newConvEl.remove();
+    var endEl = document.getElementById('ai-widget-session-end');
+    if (endEl) endEl.remove();
 
     // Re-enable and show input row
     document.getElementById('ai-widget-input-row').style.display = 'flex';
