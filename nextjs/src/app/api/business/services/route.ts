@@ -87,9 +87,9 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  if (max_bookings_per_slot != null && (!Number.isInteger(max_bookings_per_slot) || max_bookings_per_slot < 1)) {
+  if (max_bookings_per_slot != null && (!Number.isInteger(max_bookings_per_slot) || max_bookings_per_slot < 1 || max_bookings_per_slot > 10)) {
     return NextResponse.json(
-      { error: 'max_bookings_per_slot must be a positive integer' },
+      { error: 'max_bookings_per_slot must be an integer between 1 and 10' },
       { status: 400 }
     )
   }
@@ -141,9 +141,9 @@ export async function PUT(request: NextRequest) {
     )
   }
 
-  if (max_bookings_per_slot != null && (!Number.isInteger(max_bookings_per_slot) || max_bookings_per_slot < 1)) {
+  if (max_bookings_per_slot != null && (!Number.isInteger(max_bookings_per_slot) || max_bookings_per_slot < 1 || max_bookings_per_slot > 10)) {
     return NextResponse.json(
-      { error: 'max_bookings_per_slot must be a positive integer' },
+      { error: 'max_bookings_per_slot must be an integer between 1 and 10' },
       { status: 400 }
     )
   }

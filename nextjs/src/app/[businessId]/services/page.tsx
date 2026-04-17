@@ -529,6 +529,21 @@ export default function ServicesPage() {
             </div>
           </div>
           <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Max Bookings Per Slot</label>
+            <select
+              value={form.max_bookings_per_slot}
+              onChange={(e) => setForm({ ...form, max_bookings_per_slot: e.target.value })}
+              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                <option key={num} value={String(num)}>{num}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              How many appointments can be booked at the same time for this service
+            </p>
+          </div>
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
             <input
               type="text"
@@ -537,21 +552,6 @@ export default function ServicesPage() {
               className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="e.g. Haircuts, Facials"
             />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Max parallel bookings per slot</label>
-            <input
-              type="number"
-              min={1}
-              step={1}
-              required
-              value={form.max_bookings_per_slot}
-              onChange={(e) => setForm({ ...form, max_bookings_per_slot: e.target.value })}
-              className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              How many customers can book the same time slot (1 for a solo practitioner, 3+ for group or multi-staff appointments).
-            </p>
           </div>
           <div className="flex items-center gap-2">
             <input
