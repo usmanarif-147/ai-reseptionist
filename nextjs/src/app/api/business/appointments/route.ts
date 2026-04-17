@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticateAndGetBusiness } from '@/lib/auth'
 import type { AppointmentStatus, PaymentMethod } from '@/lib/types/appointments'
+import {
+  isValidDateString,
+  isDateInPast,
+  normalizeTime,
+} from '@/lib/booking/validation'
+import { isSlotAvailable } from '@/lib/booking/slot-generator'
 
 const VALID_PAYMENT_METHODS: PaymentMethod[] = ['cash_on_arrival', 'paid_cash', 'paid_online']
 const VALID_STATUSES: AppointmentStatus[] = ['confirmed', 'cancelled', 'completed']
@@ -13,8 +19,31 @@ const ALLOWED_METHODS: Record<string, PaymentMethod[]> = {
 
 const TIME_RE = /^\d{2}:\d{2}(:\d{2})?$/
 
+const AVAILABILITY_MESSAGES: Record<'holiday' | 'outside_hours' | 'full', string> = {
+  holiday: 'Business is closed on this date',
+  outside_hours: 'Slot is outside staff availability',
+  full: 'Slot is fully booked',
+}
+
 function isValidTime(v: unknown): v is string {
   return typeof v === 'string' && TIME_RE.test(v)
+}
+
+function isSelfSameSlot(
+  existing: Record<string, unknown>,
+  nextStaff: string,
+  nextDate: string,
+  nextStart: string,
+  nextEnd: string
+): boolean {
+  if ((existing.status as string) !== 'confirmed') return false
+  if ((existing.staff_id as string | null) !== nextStaff) return false
+  const existingDate = (existing.appointment_date as string).slice(0, 10)
+  if (existingDate !== nextDate) return false
+  return (
+    normalizeTime(existing.slot_start as string) === normalizeTime(nextStart) &&
+    normalizeTime(existing.slot_end as string) === normalizeTime(nextEnd)
+  )
 }
 
 export async function GET(request: NextRequest) {
@@ -109,7 +138,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No business found' }, { status: 404 })
   }
 
-  const body = await request.json()
+  let body: Record<string, unknown>
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+  }
+
   const {
     customer_name,
     customer_email,
@@ -122,34 +157,42 @@ export async function POST(request: NextRequest) {
     payment_method,
     status,
     notes,
-  } = body
+  } = body as Record<string, string | undefined>
 
   if (!customer_name || typeof customer_name !== 'string' || !customer_name.trim()) {
     return NextResponse.json({ error: 'customer_name is required' }, { status: 400 })
   }
-
-  if (!appointment_date) {
-    return NextResponse.json({ error: 'appointment_date is required' }, { status: 400 })
+  if (!service_id || typeof service_id !== 'string') {
+    return NextResponse.json({ error: 'service_id is required' }, { status: 400 })
   }
-
-  if (!payment_method || !VALID_PAYMENT_METHODS.includes(payment_method)) {
+  if (!staff_id || typeof staff_id !== 'string') {
+    return NextResponse.json({ error: 'staff_id is required' }, { status: 400 })
+  }
+  if (!appointment_date || !isValidDateString(appointment_date)) {
+    return NextResponse.json(
+      { error: 'appointment_date is required and must be YYYY-MM-DD' },
+      { status: 400 }
+    )
+  }
+  if (isDateInPast(appointment_date)) {
+    return NextResponse.json({ error: 'appointment_date cannot be in the past' }, { status: 400 })
+  }
+  if (!isValidTime(slot_start)) {
+    return NextResponse.json({ error: 'slot_start must be HH:MM or HH:MM:SS' }, { status: 400 })
+  }
+  if (!isValidTime(slot_end)) {
+    return NextResponse.json({ error: 'slot_end must be HH:MM or HH:MM:SS' }, { status: 400 })
+  }
+  if (normalizeTime(slot_start) >= normalizeTime(slot_end)) {
+    return NextResponse.json({ error: 'slot_end must be after slot_start' }, { status: 400 })
+  }
+  if (!payment_method || !VALID_PAYMENT_METHODS.includes(payment_method as PaymentMethod)) {
     return NextResponse.json(
       { error: 'payment_method must be one of: cash_on_arrival, paid_cash, paid_online' },
       { status: 400 }
     )
   }
-
-  if (slot_start != null && !isValidTime(slot_start)) {
-    return NextResponse.json({ error: 'slot_start must be HH:MM or HH:MM:SS' }, { status: 400 })
-  }
-  if (slot_end != null && !isValidTime(slot_end)) {
-    return NextResponse.json({ error: 'slot_end must be HH:MM or HH:MM:SS' }, { status: 400 })
-  }
-  if (slot_start && slot_end && slot_start >= slot_end) {
-    return NextResponse.json({ error: 'slot_end must be after slot_start' }, { status: 400 })
-  }
-
-  if (status != null && !VALID_STATUSES.includes(status)) {
+  if (status != null && !VALID_STATUSES.includes(status as AppointmentStatus)) {
     return NextResponse.json(
       { error: `status must be one of: ${VALID_STATUSES.join(', ')}` },
       { status: 400 }
@@ -170,31 +213,78 @@ export async function POST(request: NextRequest) {
   }
 
   const allowed = ALLOWED_METHODS[paymentSettings.payment_type]
-  if (!allowed || !allowed.includes(payment_method)) {
+  if (!allowed || !allowed.includes(payment_method as PaymentMethod)) {
     return NextResponse.json(
-      { error: `Payment method "${payment_method}" is not compatible with business payment type "${paymentSettings.payment_type}"` },
+      {
+        error: `Payment method "${payment_method}" is not compatible with business payment type "${paymentSettings.payment_type}"`,
+      },
       { status: 400 }
+    )
+  }
+
+  const { data: service } = await supabase
+    .from('services')
+    .select('id, duration_minutes, max_bookings_per_slot, staff_ids, is_active')
+    .eq('id', service_id)
+    .eq('business_id', business.id)
+    .maybeSingle()
+
+  if (!service || !service.is_active) {
+    return NextResponse.json({ error: 'Service not found' }, { status: 404 })
+  }
+
+  const { data: staff } = await supabase
+    .from('staff')
+    .select('id, is_active')
+    .eq('id', staff_id)
+    .eq('business_id', business.id)
+    .maybeSingle()
+
+  if (!staff || !staff.is_active) {
+    return NextResponse.json({ error: 'Staff not found' }, { status: 404 })
+  }
+
+  const staffIds: string[] = Array.isArray(service.staff_ids) ? service.staff_ids : []
+  if (!staffIds.includes(staff_id)) {
+    return NextResponse.json(
+      { error: 'Staff is not linked to this service' },
+      { status: 409 }
+    )
+  }
+
+  const availability = await isSlotAvailable(supabase, {
+    businessId: business.id,
+    staffId: staff_id,
+    dateStr: appointment_date,
+    slotStart: slot_start,
+    slotEnd: slot_end,
+    maxBookingsPerSlot: (service.max_bookings_per_slot as number) ?? 1,
+  })
+
+  if (!availability.ok) {
+    return NextResponse.json(
+      { error: AVAILABILITY_MESSAGES[availability.reason] },
+      { status: 409 }
     )
   }
 
   const insertData: Record<string, unknown> = {
     business_id: business.id,
+    service_id,
+    staff_id,
     customer_name: customer_name.trim(),
     appointment_date,
+    slot_start: normalizeTime(slot_start),
+    slot_end: normalizeTime(slot_end),
     payment_method,
+    status: status ?? 'confirmed',
   }
-
-  if (service_id) insertData.service_id = service_id
-  if (staff_id) insertData.staff_id = staff_id
   if (customer_email && typeof customer_email === 'string' && customer_email.trim()) {
     insertData.customer_email = customer_email.trim()
   }
   if (customer_phone && typeof customer_phone === 'string' && customer_phone.trim()) {
     insertData.customer_phone = customer_phone.trim()
   }
-  if (slot_start) insertData.slot_start = slot_start
-  if (slot_end) insertData.slot_end = slot_end
-  if (status) insertData.status = status
   if (notes && typeof notes === 'string' && notes.trim()) {
     insertData.notes = notes.trim()
   }
@@ -202,7 +292,7 @@ export async function POST(request: NextRequest) {
   const { data: appointment, error } = await supabase
     .from('appointments')
     .insert(insertData)
-    .select('*, services(name)')
+    .select('*, services(id, name), staff(id, name)')
     .single()
 
   if (error) {
@@ -221,17 +311,49 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: 'No business found' }, { status: 404 })
   }
 
-  const body = await request.json()
-  const { id, status, notes, staff_id, slot_start, slot_end } = body
+  let body: Record<string, unknown>
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+  }
+
+  const {
+    id,
+    status,
+    notes,
+    staff_id,
+    service_id,
+    appointment_date,
+    slot_start,
+    slot_end,
+    customer_name,
+    customer_email,
+    customer_phone,
+  } = body as Record<string, string | undefined>
 
   if (!id || typeof id !== 'string') {
     return NextResponse.json({ error: 'Appointment id is required' }, { status: 400 })
   }
 
+  const { data: existing, error: fetchErr } = await supabase
+    .from('appointments')
+    .select('*')
+    .eq('id', id)
+    .eq('business_id', business.id)
+    .maybeSingle()
+
+  if (fetchErr) {
+    return NextResponse.json({ error: fetchErr.message }, { status: 500 })
+  }
+  if (!existing) {
+    return NextResponse.json({ error: 'Appointment not found' }, { status: 404 })
+  }
+
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
 
   if (status != null) {
-    if (!VALID_STATUSES.includes(status)) {
+    if (!VALID_STATUSES.includes(status as AppointmentStatus)) {
       return NextResponse.json(
         { error: `status must be one of: ${VALID_STATUSES.join(', ')}` },
         { status: 400 }
@@ -241,19 +363,129 @@ export async function PUT(request: NextRequest) {
   }
 
   if (notes !== undefined) updates.notes = notes
-  if (staff_id !== undefined) updates.staff_id = staff_id
-
-  if (slot_start !== undefined) {
-    if (slot_start !== null && !isValidTime(slot_start)) {
-      return NextResponse.json({ error: 'slot_start must be HH:MM or HH:MM:SS' }, { status: 400 })
-    }
-    updates.slot_start = slot_start
+  if (customer_name !== undefined && typeof customer_name === 'string' && customer_name.trim()) {
+    updates.customer_name = customer_name.trim()
   }
-  if (slot_end !== undefined) {
-    if (slot_end !== null && !isValidTime(slot_end)) {
-      return NextResponse.json({ error: 'slot_end must be HH:MM or HH:MM:SS' }, { status: 400 })
+  if (customer_email !== undefined) updates.customer_email = customer_email
+  if (customer_phone !== undefined) updates.customer_phone = customer_phone
+
+  const isRescheduling =
+    appointment_date !== undefined ||
+    slot_start !== undefined ||
+    slot_end !== undefined ||
+    staff_id !== undefined ||
+    service_id !== undefined
+
+  if (isRescheduling) {
+    const nextDate = appointment_date ?? (existing.appointment_date as string).slice(0, 10)
+    const nextStart = slot_start ?? (existing.slot_start as string)
+    const nextEnd = slot_end ?? (existing.slot_end as string)
+    const nextStaff = staff_id ?? (existing.staff_id as string | null)
+    const nextService = service_id ?? (existing.service_id as string | null)
+
+    if (!isValidDateString(nextDate)) {
+      return NextResponse.json({ error: 'appointment_date must be YYYY-MM-DD' }, { status: 400 })
     }
-    updates.slot_end = slot_end
+    if (isDateInPast(nextDate)) {
+      return NextResponse.json(
+        { error: 'appointment_date cannot be in the past' },
+        { status: 400 }
+      )
+    }
+    if (!isValidTime(nextStart)) {
+      return NextResponse.json(
+        { error: 'slot_start must be HH:MM or HH:MM:SS' },
+        { status: 400 }
+      )
+    }
+    if (!isValidTime(nextEnd)) {
+      return NextResponse.json(
+        { error: 'slot_end must be HH:MM or HH:MM:SS' },
+        { status: 400 }
+      )
+    }
+    if (normalizeTime(nextStart) >= normalizeTime(nextEnd)) {
+      return NextResponse.json(
+        { error: 'slot_end must be after slot_start' },
+        { status: 400 }
+      )
+    }
+    if (!nextStaff) {
+      return NextResponse.json(
+        { error: 'staff_id is required when rescheduling' },
+        { status: 400 }
+      )
+    }
+    if (!nextService) {
+      return NextResponse.json(
+        { error: 'service_id is required when rescheduling' },
+        { status: 400 }
+      )
+    }
+
+    const { data: service } = await supabase
+      .from('services')
+      .select('id, max_bookings_per_slot, staff_ids, is_active')
+      .eq('id', nextService)
+      .eq('business_id', business.id)
+      .maybeSingle()
+
+    if (!service || !service.is_active) {
+      return NextResponse.json({ error: 'Service not found' }, { status: 404 })
+    }
+
+    const { data: staff } = await supabase
+      .from('staff')
+      .select('id, is_active')
+      .eq('id', nextStaff)
+      .eq('business_id', business.id)
+      .maybeSingle()
+
+    if (!staff || !staff.is_active) {
+      return NextResponse.json({ error: 'Staff not found' }, { status: 404 })
+    }
+
+    const staffIds: string[] = Array.isArray(service.staff_ids) ? service.staff_ids : []
+    if (!staffIds.includes(nextStaff)) {
+      return NextResponse.json(
+        { error: 'Staff is not linked to this service' },
+        { status: 409 }
+      )
+    }
+
+    // isSlotAvailable treats the currently-booked slot as occupying capacity, so when
+    // the reschedule targets the same staff/date/slot we already hold, bump the cap by 1
+    // to avoid a false "full" conflict against ourselves.
+    const selfOccupies = isSelfSameSlot(
+      existing as Record<string, unknown>,
+      nextStaff,
+      nextDate,
+      nextStart,
+      nextEnd
+    )
+
+    const availability = await isSlotAvailable(supabase, {
+      businessId: business.id,
+      staffId: nextStaff,
+      dateStr: nextDate,
+      slotStart: nextStart,
+      slotEnd: nextEnd,
+      maxBookingsPerSlot:
+        ((service.max_bookings_per_slot as number) ?? 1) + (selfOccupies ? 1 : 0),
+    })
+
+    if (!availability.ok) {
+      return NextResponse.json(
+        { error: AVAILABILITY_MESSAGES[availability.reason] },
+        { status: 409 }
+      )
+    }
+
+    if (appointment_date !== undefined) updates.appointment_date = nextDate
+    if (slot_start !== undefined) updates.slot_start = normalizeTime(nextStart)
+    if (slot_end !== undefined) updates.slot_end = normalizeTime(nextEnd)
+    if (staff_id !== undefined) updates.staff_id = nextStaff
+    if (service_id !== undefined) updates.service_id = nextService
   }
 
   const { data: appointment, error } = await supabase
@@ -261,7 +493,7 @@ export async function PUT(request: NextRequest) {
     .update(updates)
     .eq('id', id)
     .eq('business_id', business.id)
-    .select('*, services(name)')
+    .select('*, services(id, name), staff(id, name)')
     .single()
 
   if (error) {
@@ -308,7 +540,7 @@ export async function DELETE(request: NextRequest) {
     .update({ status: 'cancelled', updated_at: new Date().toISOString() })
     .eq('id', id)
     .eq('business_id', business.id)
-    .select('*, services(name)')
+    .select('*, services(id, name), staff(id, name)')
     .single()
 
   if (error) {
