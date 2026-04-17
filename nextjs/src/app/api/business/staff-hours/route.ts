@@ -1,12 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticateAndGetBusiness } from '@/lib/auth'
-
-interface HoursEntry {
-  day_of_week: number
-  open_time: string | null
-  close_time: string | null
-  is_closed: boolean
-}
+import { validateDaySlots } from '@/lib/schedule-validation'
 
 export async function GET(request: NextRequest) {
   const auth = await authenticateAndGetBusiness()
@@ -55,35 +49,39 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: 'staffId query parameter is required' }, { status: 400 })
   }
 
+  const { data: staffRow, error: staffError } = await supabase
+    .from('staff')
+    .select('id')
+    .eq('id', staffId)
+    .eq('business_id', business.id)
+    .maybeSingle()
+
+  if (staffError) {
+    return NextResponse.json({ error: staffError.message }, { status: 500 })
+  }
+  if (!staffRow) {
+    return NextResponse.json({ error: 'Staff member not found' }, { status: 404 })
+  }
+
   const body = await request.json()
-  const { hours } = body
-
-  if (!Array.isArray(hours)) {
-    return NextResponse.json({ error: 'hours must be an array' }, { status: 400 })
+  // Accept both { hours: [...] } (existing clients) and { slots: [...] } (per spec).
+  const rawSlots = Array.isArray(body?.hours) ? body.hours : body?.slots
+  const result = validateDaySlots(rawSlots, { requireAllDays: false })
+  if ('error' in result) {
+    return NextResponse.json({ error: result.error }, { status: 400 })
   }
 
-  for (const entry of hours as HoursEntry[]) {
-    if (entry.day_of_week == null || entry.day_of_week < 0 || entry.day_of_week > 6) {
-      return NextResponse.json(
-        { error: 'Each entry must have a valid day_of_week (0-6)' },
-        { status: 400 }
-      )
-    }
-  }
-
-  const insertData = (hours as HoursEntry[]).map((entry) => ({
+  const now = new Date().toISOString()
+  const insertData = result.slots.map((slot) => ({
     business_id: business.id,
     staff_id: staffId,
-    day_of_week: entry.day_of_week,
-    open_time: entry.is_closed ? null : entry.open_time,
-    close_time: entry.is_closed ? null : entry.close_time,
-    is_closed: entry.is_closed,
-    updated_at: new Date().toISOString(),
+    day_of_week: slot.day_of_week,
+    open_time: slot.is_closed ? null : slot.open_time,
+    close_time: slot.is_closed ? null : slot.close_time,
+    is_closed: slot.is_closed,
+    updated_at: now,
   }))
 
-  // Replace-all semantics: after the unique constraint on
-  // (staff_id, day_of_week) was dropped for multi-slot support,
-  // onConflict upsert is no longer valid here.
   const { error: delError } = await supabase
     .from('staff_hours')
     .delete()
