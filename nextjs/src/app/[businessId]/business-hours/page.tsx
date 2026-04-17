@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { DayHoursEditor, emptyDaySlots, groupRowsByDay, flattenDaysToRows } from '@/components/dashboard'
 import type { DaySlots } from '@/components/dashboard'
+import HolidaysModal from './HolidaysModal'
 
 function defaultHours(): DaySlots[] {
   // Monday–Friday open by default; Saturday/Sunday closed.
@@ -17,6 +18,7 @@ export default function HoursPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [holidaysOpen, setHolidaysOpen] = useState(false)
 
   useEffect(() => { loadHours() }, [businessId])
 
@@ -59,7 +61,7 @@ export default function HoursPage() {
     const res = await fetch('/api/business/hours', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ hours: flattenDaysToRows(hours) }),
+      body: JSON.stringify({ slots: flattenDaysToRows(hours) }),
     })
 
     if (!res.ok) {
@@ -77,10 +79,24 @@ export default function HoursPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">Business Hours</h1>
-      <p className="text-gray-500 text-sm mb-8">
-        Set when your business is open. Add multiple slots per day to represent breaks (e.g., lunch).
-      </p>
+      <div className="flex items-start justify-between mb-8 gap-4 max-w-2xl">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-1">Business Hours</h1>
+          <p className="text-gray-500 text-sm">
+            Set when your business is open. Add multiple slots per day to represent breaks (e.g., lunch).
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setHolidaysOpen(true)}
+          className="flex-shrink-0 inline-flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0V11.25A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+          </svg>
+          Manage Holidays
+        </button>
+      </div>
 
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-4 text-sm max-w-2xl">
@@ -106,6 +122,8 @@ export default function HoursPage() {
           {saving ? 'Saving...' : 'Save Hours'}
         </button>
       </form>
+
+      <HolidaysModal isOpen={holidaysOpen} onClose={() => setHolidaysOpen(false)} />
     </div>
   )
 }
