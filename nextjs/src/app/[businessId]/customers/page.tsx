@@ -212,18 +212,16 @@ export default function CustomersPage() {
           emptyMessage="No customers match the selected filter."
         />
       ) : (
-        <div className="max-w-2xl">
-          <ListView<Customer>
-            data={customers}
-            keyExtractor={(c) => c.id}
-            renderCard={renderCustomerCard}
-            filters={customerFilters}
-            filterValues={filterValues}
-            onFilterChange={handleFilterChange}
-            pagination={paginationInfo}
-            emptyMessage="No customers match the selected filter."
-          />
-        </div>
+        <ListView<Customer>
+          data={customers}
+          keyExtractor={(c) => c.id}
+          renderCard={renderCustomerCard}
+          filters={customerFilters}
+          filterValues={filterValues}
+          onFilterChange={handleFilterChange}
+          pagination={paginationInfo}
+          emptyMessage="No customers match the selected filter."
+        />
       )}
     </div>
   )

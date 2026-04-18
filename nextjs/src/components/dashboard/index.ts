@@ -16,6 +16,9 @@ export { default as DateRangeFilter } from './DateRangeFilter'
 export type { DateRangePreset } from './DateRangeFilter'
 export { default as Toast } from './Toast'
 export type { ToastType } from './Toast'
+export { default as CustomFieldsManager } from './CustomFieldsManager'
+export type { CustomField } from './CustomFieldsManager'
+export { default as CustomFieldsInfoBox } from './CustomFieldsInfoBox'
 export type {
   ColumnDef,
   ActionDef,
