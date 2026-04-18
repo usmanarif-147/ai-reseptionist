@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
+import PageHeader from '@/components/dashboard/PageHeader'
 
 type PaymentType = 'cash' | 'online' | 'both'
 
@@ -70,8 +71,7 @@ export default function PaymentsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">Payment Settings</h1>
-      <p className="text-gray-500 text-sm mb-8">Choose how customers pay for appointments</p>
+      <PageHeader title="Payment Settings" subtitle="Choose how customers pay for appointments" />
 
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 mb-4 text-sm max-w-2xl">

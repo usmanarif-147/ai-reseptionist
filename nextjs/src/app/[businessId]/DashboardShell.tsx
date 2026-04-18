@@ -41,15 +41,13 @@ export default function DashboardShell({
 
   const sidebarItems = useMemo(
     () =>
-      mainNav
-        .filter((item) => item.label !== 'Settings')
-        .map((item) => {
-          const href =
-            item.label === 'Overview'
-              ? `/${businessId}/dashboard`
-              : resolveHref(item.href, businessId)
-          return { ...item, href }
-        }),
+      mainNav.map((item) => {
+        const href =
+          item.label === 'Overview'
+            ? `/${businessId}/dashboard`
+            : resolveHref(item.href, businessId)
+        return { ...item, href }
+      }),
     [businessId],
   )
 

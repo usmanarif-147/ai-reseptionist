@@ -7,14 +7,12 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 // Sub-pages that live directly under /{businessId}/ (outside /dashboard/)
 const BUSINESS_SUB_PAGES = new Set([
   'services',
-  'business-hours',
   'staff',
   'appointments',
   'customers',
   'widget-settings',
   'widget-stats',
-  'payments',
-  'subscription',
+  'settings',
 ])
 
 function isBusinessDashboardRoute(pathname: string) {
@@ -104,8 +102,12 @@ export async function middleware(request: NextRequest) {
     if (business) {
       // Preserve the rest of the path (e.g. /dashboard/subscription → /{id}/subscription)
       const rest = pathname.replace(/^\/dashboard/, '')
-      // Map old /dashboard/hours to new /business-hours
-      const mappedRest = rest === '/hours' ? '/business-hours' : rest === '/widget' ? '/widget-settings' : rest
+      // Map legacy /dashboard/* paths to current locations (including moved-to-settings routes)
+      const mappedRest = rest === '/hours' ? '/settings/business-hours'
+                       : rest === '/subscription' ? '/settings/subscription'
+                       : rest === '/payments' ? '/settings/payments'
+                       : rest === '/widget' ? '/widget-settings'
+                       : rest
       if (mappedRest === '') {
         return NextResponse.redirect(new URL(`/${business.id}/dashboard`, request.url))
       }
@@ -168,13 +170,12 @@ export const config = {
     '/:businessId/dashboard',
     '/:businessId/dashboard/:path*',
     '/:businessId/services',
-    '/:businessId/business-hours',
     '/:businessId/staff',
     '/:businessId/appointments',
     '/:businessId/customers',
     '/:businessId/widget-settings',
     '/:businessId/widget-stats',
-    '/:businessId/payments',
-    '/:businessId/subscription',
+    '/:businessId/settings',
+    '/:businessId/settings/:path*',
   ],
 }

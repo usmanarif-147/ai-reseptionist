@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { stripe } from '@/lib/stripe'
 import { redirect } from 'next/navigation'
+import PageHeader from '@/components/dashboard/PageHeader'
 
 export default async function SubscriptionPage({
   params,
@@ -34,13 +35,13 @@ export default async function SubscriptionPage({
       .eq('user_id', user.id)
       .single()
 
-    if (!sub) redirect(`/${businessId}/subscription`)
+    if (!sub) redirect(`/${businessId}/settings/subscription`)
 
     await stripe.subscriptions.update(sub.stripe_subscription_id, {
       cancel_at_period_end: true,
     })
 
-    redirect(`/${businessId}/subscription?scheduled=1`)
+    redirect(`/${businessId}/settings/subscription?scheduled=1`)
   }
 
   const statusColor: Record<string, string> = {
@@ -59,8 +60,7 @@ export default async function SubscriptionPage({
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">Subscription</h1>
-      <p className="text-gray-500 text-sm mb-8">Manage your billing and plan</p>
+      <PageHeader title="Subscription" subtitle="Manage your billing and plan" />
 
       {scheduled === '1' && (
         <div className="max-w-lg bg-green-50 border border-green-100 rounded-xl p-4 mb-6 text-sm text-green-700">
