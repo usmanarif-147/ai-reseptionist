@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { type VisibilityMode } from '../components/shared'
-import InfoControlSidebar, { type InfoCategory } from '../components/InfoControlSidebar'
+import InfoControlTabs, { type InfoCategory } from '../components/InfoControlTabs'
 import BusinessDetailsSection from '../components/info-sections/BusinessDetailsSection'
 import BusinessHoursSection from '../components/info-sections/BusinessHoursSection'
 import ServicesSection from '../components/info-sections/ServicesSection'
@@ -148,81 +148,77 @@ export default function InformationControlPage() {
       )}
 
       <div className="bg-white rounded-xl border border-gray-100">
-        <div className="flex">
-          <div className="py-4 pl-4">
-            <InfoControlSidebar activeSection={activeInfoSection} onSelect={setActiveInfoSection} />
-          </div>
+        <InfoControlTabs activeSection={activeInfoSection} onSelect={setActiveInfoSection} />
 
-          <div className="flex-1 p-6 min-w-0">
-            {activeInfoSection === 'business-details' && (
-              <BusinessDetailsSection
-                showBusinessName={showBusinessName}
-                setShowBusinessName={setShowBusinessName}
-                showContact={showContact}
-                setShowContact={setShowContact}
-                showAddress={showAddress}
-                setShowAddress={setShowAddress}
-                showBusinessType={showBusinessType}
-                setShowBusinessType={setShowBusinessType}
-              />
-            )}
+        <div className="p-6 min-w-0">
+          {activeInfoSection === 'business-details' && (
+            <BusinessDetailsSection
+              showBusinessName={showBusinessName}
+              setShowBusinessName={setShowBusinessName}
+              showContact={showContact}
+              setShowContact={setShowContact}
+              showAddress={showAddress}
+              setShowAddress={setShowAddress}
+              showBusinessType={showBusinessType}
+              setShowBusinessType={setShowBusinessType}
+            />
+          )}
 
-            {activeInfoSection === 'business-hours' && (
-              <BusinessHoursSection
-                showBusinessHours={showBusinessHours}
-                setShowBusinessHours={setShowBusinessHours}
-              />
-            )}
+          {activeInfoSection === 'business-hours' && (
+            <BusinessHoursSection
+              showBusinessHours={showBusinessHours}
+              setShowBusinessHours={setShowBusinessHours}
+            />
+          )}
 
-            {activeInfoSection === 'services' && (
-              <ServicesSection
-                servicesVisibility={servicesVisibility}
-                setServicesVisibility={setServicesVisibility}
-                hiddenServiceIds={hiddenServiceIds}
-                setHiddenServiceIds={setHiddenServiceIds}
-                allServices={allServices}
-              />
-            )}
+          {activeInfoSection === 'services' && (
+            <ServicesSection
+              servicesVisibility={servicesVisibility}
+              setServicesVisibility={setServicesVisibility}
+              hiddenServiceIds={hiddenServiceIds}
+              setHiddenServiceIds={setHiddenServiceIds}
+              allServices={allServices}
+            />
+          )}
 
-            {activeInfoSection === 'staff' && (
-              <StaffSection
-                staffVisibility={staffVisibility}
-                setStaffVisibility={setStaffVisibility}
-                hiddenStaffIds={hiddenStaffIds}
-                setHiddenStaffIds={setHiddenStaffIds}
-                allStaff={allStaff}
-              />
-            )}
+          {activeInfoSection === 'staff' && (
+            <StaffSection
+              staffVisibility={staffVisibility}
+              setStaffVisibility={setStaffVisibility}
+              hiddenStaffIds={hiddenStaffIds}
+              setHiddenStaffIds={setHiddenStaffIds}
+              allStaff={allStaff}
+            />
+          )}
 
-            {activeInfoSection === 'appointments' && (
-              <AppointmentsSection
-                showAppointmentService={showAppointmentService}
-                setShowAppointmentService={setShowAppointmentService}
-                showAppointmentStaff={showAppointmentStaff}
-                setShowAppointmentStaff={setShowAppointmentStaff}
-                showAppointmentDatetime={showAppointmentDatetime}
-                setShowAppointmentDatetime={setShowAppointmentDatetime}
-                showAppointmentDuration={showAppointmentDuration}
-                setShowAppointmentDuration={setShowAppointmentDuration}
-                showAppointmentPaymentType={showAppointmentPaymentType}
-                setShowAppointmentPaymentType={setShowAppointmentPaymentType}
-                showAppointmentPaymentStatus={showAppointmentPaymentStatus}
-                setShowAppointmentPaymentStatus={setShowAppointmentPaymentStatus}
-                showAppointmentNotes={showAppointmentNotes}
-                setShowAppointmentNotes={setShowAppointmentNotes}
-              />
-            )}
+          {activeInfoSection === 'appointments' && (
+            <AppointmentsSection
+              showAppointmentService={showAppointmentService}
+              setShowAppointmentService={setShowAppointmentService}
+              showAppointmentStaff={showAppointmentStaff}
+              setShowAppointmentStaff={setShowAppointmentStaff}
+              showAppointmentDatetime={showAppointmentDatetime}
+              setShowAppointmentDatetime={setShowAppointmentDatetime}
+              showAppointmentDuration={showAppointmentDuration}
+              setShowAppointmentDuration={setShowAppointmentDuration}
+              showAppointmentPaymentType={showAppointmentPaymentType}
+              setShowAppointmentPaymentType={setShowAppointmentPaymentType}
+              showAppointmentPaymentStatus={showAppointmentPaymentStatus}
+              setShowAppointmentPaymentStatus={setShowAppointmentPaymentStatus}
+              showAppointmentNotes={showAppointmentNotes}
+              setShowAppointmentNotes={setShowAppointmentNotes}
+            />
+          )}
 
-            <div className="mt-8">
-              <button
-                type="button"
-                onClick={saveSettings}
-                disabled={saving}
-                className="bg-blue-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-              >
-                {saving ? 'Saving...' : 'Save Changes'}
-              </button>
-            </div>
+          <div className="mt-8">
+            <button
+              type="button"
+              onClick={saveSettings}
+              disabled={saving}
+              className="bg-blue-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+            >
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
           </div>
         </div>
       </div>

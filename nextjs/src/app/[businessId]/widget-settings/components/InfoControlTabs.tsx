@@ -10,7 +10,7 @@ const INFO_CATEGORIES = [
 
 export type InfoCategory = typeof INFO_CATEGORIES[number]['id']
 
-export default function InfoControlSidebar({
+export default function InfoControlTabs({
   activeSection,
   onSelect,
 }: {
@@ -18,26 +18,29 @@ export default function InfoControlSidebar({
   onSelect: (id: InfoCategory) => void
 }) {
   return (
-    <nav className="w-48 flex-shrink-0 border-r border-gray-100 pr-4">
-      <ul className="space-y-0.5">
-        {INFO_CATEGORIES.map((cat) => (
-          <li key={cat.id}>
-            <button
-              type="button"
-              onClick={() => onSelect(cat.id)}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left ${
-                activeSection === cat.id
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-              }`}
-            >
-              <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                <path d={cat.icon} />
-              </svg>
-              {cat.label}
-            </button>
-          </li>
-        ))}
+    <nav className="border-b border-gray-100">
+      <ul className="flex flex-wrap gap-1 px-2">
+        {INFO_CATEGORIES.map((cat) => {
+          const active = activeSection === cat.id
+          return (
+            <li key={cat.id}>
+              <button
+                type="button"
+                onClick={() => onSelect(cat.id)}
+                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                  active
+                    ? 'border-blue-600 text-blue-700'
+                    : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+                }`}
+              >
+                <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                  <path d={cat.icon} />
+                </svg>
+                {cat.label}
+              </button>
+            </li>
+          )
+        })}
       </ul>
     </nav>
   )

@@ -19,11 +19,3 @@ export const dayPickerClassNames = {
   outside: 'text-gray-300',
   disabled: 'text-gray-300 cursor-not-allowed',
 }
-
-export const calendarDayPickerClassNames = {
-  ...dayPickerClassNames,
-  day: 'w-14 h-14 text-sm',
-  day_button:
-    'w-14 h-14 rounded-lg hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400 flex flex-col items-center justify-center gap-0.5',
-  weekday: 'text-xs font-medium text-gray-400 w-14 h-9 flex items-center justify-center',
-}

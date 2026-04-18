@@ -1,15 +1,16 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { DayPicker, type DayButtonProps } from 'react-day-picker'
-import 'react-day-picker/style.css'
+import FullCalendar from '@fullcalendar/react'
+import dayGridPlugin from '@fullcalendar/daygrid'
+import interactionPlugin, { type DateClickArg } from '@fullcalendar/interaction'
+import type { DatesSetArg, EventClickArg } from '@fullcalendar/core'
 import BookingLinkCard from './BookingLinkCard'
 import CreateAppointmentModal from './CreateAppointmentModal'
 import DayDetailModal from './DayDetailModal'
 import EditAppointmentModal from './EditAppointmentModal'
-import { calendarDayPickerClassNames } from './dayPickerClassNames'
-import { toDate, toIsoDate, toMonthParam } from './utils'
+import { toMonthParam } from './utils'
 import type {
   CalendarAppointment,
   CalendarResponse,
@@ -38,6 +39,8 @@ export default function AppointmentsPage() {
   const [isDayDetailOpen, setDayDetailOpen] = useState(false)
 
   const [editingAppointment, setEditingAppointment] = useState<CalendarAppointment | null>(null)
+
+  const currentMonthKeyRef = useRef<string>('')
 
   const loadCalendar = useCallback(async (target: Date) => {
     setLoadingCalendar(true)
@@ -80,16 +83,65 @@ export default function AppointmentsPage() {
     loadCalendar(month)
   }, [month, loadCalendar])
 
-  const daysWithAppointments = useMemo(() => {
-    const arr: Date[] = []
+  const statusColors: Record<string, string> = {
+    confirmed: '#3b82f6',
+    completed: '#10b981',
+    cancelled: '#9ca3af',
+  }
+
+  const events = useMemo(() => {
+    const list: {
+      id: string
+      title: string
+      start: string
+      end: string
+      allDay: boolean
+      backgroundColor: string
+      borderColor: string
+      extendedProps: { isoDate: string; status: string; timeLabel: string }
+    }[] = []
     for (const iso of Object.keys(calendar)) {
-      if ((calendar[iso]?.count ?? 0) > 0) arr.push(toDate(iso))
+      const day = calendar[iso]
+      if (!day) continue
+      for (const apt of day.appointments) {
+        const color = statusColors[apt.status] ?? '#3b82f6'
+        list.push({
+          id: apt.id,
+          title: `${apt.customer_name} — ${apt.service?.name ?? 'N/A'}`,
+          start: `${iso}T${apt.slot_start}:00`,
+          end: `${iso}T${apt.slot_end}:00`,
+          allDay: true,
+          backgroundColor: color,
+          borderColor: color,
+          extendedProps: { isoDate: iso, status: apt.status, timeLabel: apt.slot_start },
+        })
+      }
     }
-    return arr
+    return list
   }, [calendar])
 
-  const handleDayClick = useCallback((day: Date) => {
-    const iso = toIsoDate(day)
+  const handleDatesSet = useCallback(
+    (arg: DatesSetArg) => {
+      const midTs = (arg.start.getTime() + arg.end.getTime()) / 2
+      const mid = new Date(midTs)
+      const key = toMonthParam(mid)
+      if (key === currentMonthKeyRef.current) return
+      currentMonthKeyRef.current = key
+      const nextMonth = new Date(mid.getFullYear(), mid.getMonth(), 1)
+      setMonth(nextMonth)
+    },
+    [],
+  )
+
+  const handleDateClick = useCallback((arg: DateClickArg) => {
+    setSelectedDayIso(arg.dateStr)
+    setDayDetailOpen(true)
+  }, [])
+
+  const handleEventClick = useCallback((arg: EventClickArg) => {
+    arg.jsEvent.preventDefault()
+    const iso = (arg.event.extendedProps as { isoDate?: string })?.isoDate
+    if (!iso) return
     setSelectedDayIso(iso)
     setDayDetailOpen(true)
   }, [])
@@ -147,60 +199,54 @@ export default function AppointmentsPage() {
 
       <BookingLinkCard url={bookingUrl} />
 
-      <div className="bg-white border border-gray-100 rounded-xl p-5">
+      <div className="bg-white border border-gray-100 rounded-xl p-5 overflow-hidden">
         {calendarError && (
           <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm mb-4">
             {calendarError}
           </div>
         )}
 
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-semibold text-gray-900">Monthly Calendar</h2>
           {loadingCalendar && (
             <span className="text-xs text-gray-400">Loading...</span>
           )}
         </div>
 
-        <div className="flex justify-center">
-          <DayPicker
-            mode="single"
-            month={month}
-            onMonthChange={setMonth}
-            onDayClick={handleDayClick}
-            modifiers={{ hasAppointments: daysWithAppointments }}
-            modifiersClassNames={{
-              hasAppointments: 'bg-blue-50 text-blue-800 font-semibold',
-              today: 'ring-2 ring-blue-500',
+        <div className="appointments-fc w-full">
+          <FullCalendar
+            plugins={[dayGridPlugin, interactionPlugin]}
+            initialView="dayGridMonth"
+            headerToolbar={{
+              left: 'prev,next today',
+              center: 'title',
+              right: '',
             }}
-            classNames={calendarDayPickerClassNames}
-            components={{
-              DayButton: (props: DayButtonProps) => {
-                const { day, modifiers, children: _children, ...buttonProps } = props
-                const iso = toIsoDate(day.date)
-                const count = calendar[iso]?.count ?? 0
-                return (
-                  <button {...buttonProps} type="button">
-                    <span>{day.date.getDate()}</span>
-                    {count > 0 && !modifiers.outside && (
-                      <span className="bg-blue-100 text-blue-700 text-[10px] leading-none rounded-full font-semibold px-1.5 py-0.5 min-w-[18px] text-center">
-                        {count}
-                      </span>
-                    )}
-                  </button>
-                )
-              },
-            }}
+            height="auto"
+            fixedWeekCount={false}
+            dayMaxEventRows={3}
+            moreLinkClick="popover"
+            displayEventTime={false}
+            eventDisplay="block"
+            events={events}
+            dateClick={handleDateClick}
+            eventClick={handleEventClick}
+            datesSet={handleDatesSet}
           />
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600 justify-center">
           <div className="flex items-center gap-1.5">
-            <span className="inline-block w-3 h-3 rounded bg-blue-50 border border-blue-200" />
-            Has appointments
+            <span className="inline-block w-3 h-3 rounded" style={{ backgroundColor: '#3b82f6' }} />
+            Confirmed
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="inline-block w-3 h-3 rounded ring-2 ring-blue-500" />
-            Today
+            <span className="inline-block w-3 h-3 rounded" style={{ backgroundColor: '#10b981' }} />
+            Completed
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="inline-block w-3 h-3 rounded" style={{ backgroundColor: '#9ca3af' }} />
+            Cancelled
           </div>
         </div>
       </div>
