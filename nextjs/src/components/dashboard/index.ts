@@ -16,7 +16,6 @@ export { default as DateRangeFilter } from './DateRangeFilter'
 export type { DateRangePreset } from './DateRangeFilter'
 export { default as Toast } from './Toast'
 export type { ToastType } from './Toast'
-export { useSidebarCollapsed } from './useSidebarCollapsed'
 export type {
   ColumnDef,
   ActionDef,

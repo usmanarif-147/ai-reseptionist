@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState, KeyboardEvent } from 'react'
 import type { NavItem } from '@/lib/navigation'
-import { flattenNav, type FlatNavEntry } from '@/lib/nav-active'
+import { flattenNav, type FlatNavEntry, resolveHref } from '@/lib/nav-active'
 
 interface QuickSearchProps {
   mainNav: NavItem[]
   sectionNav?: NavItem[]
+  businessId?: string
   onNavigate: (href: string) => void
 }
 
@@ -20,7 +21,7 @@ function dedupe(entries: FlatNavEntry[]): FlatNavEntry[] {
   })
 }
 
-export default function QuickSearch({ mainNav, sectionNav, onNavigate }: QuickSearchProps) {
+export default function QuickSearch({ mainNav, sectionNav, businessId, onNavigate }: QuickSearchProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
@@ -75,7 +76,8 @@ export default function QuickSearch({ mainNav, sectionNav, onNavigate }: QuickSe
   }, [])
 
   function selectEntry(entry: FlatNavEntry) {
-    onNavigate(entry.href)
+    const resolvedHref = businessId ? resolveHref(entry.href, businessId) : entry.href
+    onNavigate(resolvedHref)
     setOpen(false)
     setQuery('')
   }
