@@ -11,7 +11,6 @@ const BUSINESS_SUB_PAGES = new Set([
   'appointments',
   'customers',
   'widget-settings',
-  'widget-stats',
   'settings',
 ])
 
@@ -175,7 +174,6 @@ export const config = {
     '/:businessId/customers',
     '/:businessId/widget-settings',
     '/:businessId/widget-settings/:path*',
-    '/:businessId/widget-stats',
     '/:businessId/settings',
     '/:businessId/settings/:path*',
   ],
