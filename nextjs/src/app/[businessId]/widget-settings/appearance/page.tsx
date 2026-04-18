@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 
-export default async function WidgetSettingsIndexPage({
+export default async function WidgetSettingsAppearanceIndexPage({
   params,
 }: {
   params: Promise<{ businessId: string }>

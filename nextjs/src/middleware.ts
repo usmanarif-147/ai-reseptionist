@@ -174,6 +174,7 @@ export const config = {
     '/:businessId/appointments',
     '/:businessId/customers',
     '/:businessId/widget-settings',
+    '/:businessId/widget-settings/:path*',
     '/:businessId/widget-stats',
     '/:businessId/settings',
     '/:businessId/settings/:path*',
