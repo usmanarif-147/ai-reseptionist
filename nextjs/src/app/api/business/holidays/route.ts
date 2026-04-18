@@ -24,11 +24,31 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'No business found' }, { status: 404 })
   }
 
-  const month = request.nextUrl.searchParams.get('month')
+  const params = request.nextUrl.searchParams
+  const month = params.get('month')
+  const pageParam = params.get('page')
+  const pageSizeParam = params.get('page_size')
+  const isPaginated = pageParam !== null || pageSizeParam !== null
+
+  let page = 1
+  let pageSize = 5
+  if (isPaginated) {
+    page = pageParam === null ? 1 : parseInt(pageParam, 10)
+    pageSize = pageSizeParam === null ? 5 : parseInt(pageSizeParam, 10)
+    if (!Number.isFinite(page) || page < 1) {
+      return NextResponse.json({ error: 'page must be an integer >= 1' }, { status: 400 })
+    }
+    if (!Number.isFinite(pageSize) || pageSize < 1 || pageSize > 5) {
+      return NextResponse.json(
+        { error: 'page_size must be an integer between 1 and 5' },
+        { status: 400 }
+      )
+    }
+  }
 
   let query = supabase
     .from('business_holidays')
-    .select('id, holiday_date, label')
+    .select('id, holiday_date, label', isPaginated ? { count: 'exact' } : {})
     .eq('business_id', business.id)
     .order('holiday_date', { ascending: true })
 
@@ -40,10 +60,19 @@ export async function GET(request: NextRequest) {
     query = query.gte('holiday_date', range.start).lt('holiday_date', range.end)
   }
 
-  const { data, error } = await query
+  if (isPaginated) {
+    const offset = (page - 1) * pageSize
+    query = query.range(offset, offset + pageSize - 1)
+  }
+
+  const { data, error, count } = await query
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  if (isPaginated) {
+    return NextResponse.json({ items: data ?? [], total: count ?? 0 })
   }
 
   return NextResponse.json(data)
