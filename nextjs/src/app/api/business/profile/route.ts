@@ -78,14 +78,13 @@ export async function POST(request: NextRequest) {
       business_id: business.id,
       payment_type: 'cash',
     }),
-    // Create default business hours (Mon-Fri 9-17, Sat-Sun closed)
     adminSupabase.from('business_hours').insert(
       Array.from({ length: 7 }, (_, i) => ({
         business_id: business.id,
         day_of_week: i,
-        open_time: i >= 1 && i <= 5 ? '09:00' : null,
-        close_time: i >= 1 && i <= 5 ? '17:00' : null,
-        is_closed: i === 0 || i === 6,
+        open_time: null,
+        close_time: null,
+        is_closed: true,
       }))
     ),
   ])

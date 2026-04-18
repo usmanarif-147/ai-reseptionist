@@ -5,11 +5,10 @@ import { useParams } from 'next/navigation'
 import { DayHoursEditor, emptyDaySlots, groupRowsByDay, flattenDaysToRows } from '@/components/dashboard'
 import type { DaySlots } from '@/components/dashboard'
 import PageHeader from '@/components/dashboard/PageHeader'
-import HolidaysModal from './HolidaysModal'
+import BulkSlotsModal from './BulkSlotsModal'
 
 function defaultHours(): DaySlots[] {
-  // Monday–Friday open by default; Saturday/Sunday closed.
-  return emptyDaySlots({ defaultOpenDays: [1, 2, 3, 4, 5] })
+  return emptyDaySlots()
 }
 
 export default function HoursPage() {
@@ -19,7 +18,7 @@ export default function HoursPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-  const [holidaysOpen, setHolidaysOpen] = useState(false)
+  const [bulkOpen, setBulkOpen] = useState(false)
 
   useEffect(() => { loadHours() }, [businessId])
 
@@ -46,13 +45,22 @@ export default function HoursPage() {
         setError('Each open day must have at least one time slot.')
         return
       }
-      for (const slot of day.slots) {
+      if (day.slots.length > 5) {
+        setError('A day can have at most 5 time slots.')
+        return
+      }
+      for (let i = 0; i < day.slots.length; i++) {
+        const slot = day.slots[i]
         if (!slot.open_time || !slot.close_time) {
           setError('Each slot must have both an open and close time.')
           return
         }
         if (slot.open_time >= slot.close_time) {
           setError('Each slot\u2019s open time must be before its close time.')
+          return
+        }
+        if (i > 0 && slot.open_time <= day.slots[i - 1].close_time) {
+          setError('Each slot must start after the previous slot\u2019s close time.')
           return
         }
       }
@@ -78,16 +86,16 @@ export default function HoursPage() {
 
   if (loading) return <LoadingSkeleton />
 
-  const holidaysButton = (
+  const bulkButton = (
     <button
       type="button"
-      onClick={() => setHolidaysOpen(true)}
+      onClick={() => setBulkOpen(true)}
       className="flex-shrink-0 inline-flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
     >
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0V11.25A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m6-6H6" />
       </svg>
-      Manage Holidays
+      Bulk Time Slots
     </button>
   )
 
@@ -96,7 +104,7 @@ export default function HoursPage() {
       <PageHeader
         title="Business Hours"
         subtitle="Set when your business is open. Add multiple slots per day to represent breaks (e.g., lunch)."
-        actions={holidaysButton}
+        actions={bulkButton}
       />
 
       {error && (
@@ -124,7 +132,12 @@ export default function HoursPage() {
         </button>
       </form>
 
-      <HolidaysModal isOpen={holidaysOpen} onClose={() => setHolidaysOpen(false)} />
+      <BulkSlotsModal
+        isOpen={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        hours={hours}
+        onChange={setHours}
+      />
     </div>
   )
 }

@@ -98,46 +98,55 @@ export default function DayHoursEditor({
           {day.is_closed ? (
             <p className="text-sm text-gray-400">---</p>
           ) : (
-            <div className="space-y-2">
-              {day.slots.map((slot, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <input
-                    type="time"
-                    value={slot.open_time || ''}
-                    onChange={(e) => updateSlot(day.day_of_week, i, 'open_time', e.target.value)}
-                    className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <span className="text-gray-400 text-sm">to</span>
-                  <input
-                    type="time"
-                    value={slot.close_time || ''}
-                    onChange={(e) => updateSlot(day.day_of_week, i, 'close_time', e.target.value)}
-                    className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  {day.slots.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeSlot(day.day_of_week, i)}
-                      aria-label="Remove slot"
-                      className="text-gray-400 hover:text-red-600 p-1"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={() => addSlot(day.day_of_week)}
-                className="text-xs text-blue-600 hover:text-blue-700 font-medium inline-flex items-center gap-1"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                </svg>
-                Add another slot
-              </button>
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-x-4 gap-y-3">
+                {day.slots.map((slot, i) => {
+                  const prevClose = i > 0 ? day.slots[i - 1].close_time || undefined : undefined
+                  return (
+                    <div key={i} className="flex items-center gap-2">
+                      <input
+                        type="time"
+                        value={slot.open_time || ''}
+                        min={prevClose}
+                        onChange={(e) => updateSlot(day.day_of_week, i, 'open_time', e.target.value)}
+                        className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <span className="text-gray-400 text-sm">to</span>
+                      <input
+                        type="time"
+                        value={slot.close_time || ''}
+                        min={slot.open_time || undefined}
+                        onChange={(e) => updateSlot(day.day_of_week, i, 'close_time', e.target.value)}
+                        className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      {day.slots.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeSlot(day.day_of_week, i)}
+                          aria-label="Remove slot"
+                          className="text-gray-400 hover:text-red-600 p-1"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+              {day.slots.length < 5 && (
+                <button
+                  type="button"
+                  onClick={() => addSlot(day.day_of_week)}
+                  className="text-xs text-blue-600 hover:text-blue-700 font-medium inline-flex items-center gap-1"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add another slot
+                </button>
+              )}
             </div>
           )}
         </div>

@@ -44,9 +44,9 @@ export default async function DashboardPage() {
         Array.from({ length: 7 }, (_, i) => ({
           business_id: newBusiness.id,
           day_of_week: i,
-          open_time: i >= 1 && i <= 5 ? '09:00' : null,
-          close_time: i >= 1 && i <= 5 ? '17:00' : null,
-          is_closed: i === 0 || i === 6,
+          open_time: null,
+          close_time: null,
+          is_closed: true,
         }))
       ),
     ])

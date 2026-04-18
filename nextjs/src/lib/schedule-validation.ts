@@ -52,6 +52,16 @@ function checkNoOverlap(slots: { start: number; end: number }[]): boolean {
   return true
 }
 
+function checkSequential(slots: { start: number; end: number }[]): boolean {
+  const sorted = [...slots].sort((a, b) => a.start - b.start)
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].start <= sorted[i - 1].end) return false
+  }
+  return true
+}
+
+export const MAX_SLOTS_PER_DAY = 5
+
 /**
  * Validates a weekly-schedule `slots` array (business_hours / staff_hours).
  * When `requireAllDays` is true, every day 0-6 must appear (business hours).
@@ -107,6 +117,9 @@ export function validateDaySlots(
 
   for (const [day, daySlots] of Array.from(byDay.entries())) {
     const open = daySlots.filter((s) => !s.is_closed)
+    if (open.length > MAX_SLOTS_PER_DAY) {
+      return { error: `Max ${MAX_SLOTS_PER_DAY} slots per day on day ${day}` }
+    }
     if (open.length < 2) continue
 
     const ranges = open.map((s) => ({
@@ -115,6 +128,9 @@ export function validateDaySlots(
     }))
     if (!checkNoOverlap(ranges)) {
       return { error: `Overlapping time slots on day ${day}` }
+    }
+    if (!checkSequential(ranges)) {
+      return { error: `Slot must start after previous slot ends on day ${day}` }
     }
   }
 
