@@ -368,6 +368,7 @@ export default function StaffPage() {
         onSave={handleSubmit}
         title={editingId ? 'Edit Staff Member' : 'New Staff Member'}
         isSaving={saving}
+        size="lg"
       >
         <div className="space-y-4">
           {error && (
@@ -408,7 +409,7 @@ export default function StaffPage() {
               placeholder="Short description or biography"
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
               <input

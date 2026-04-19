@@ -9,9 +9,10 @@ interface ModalProps {
   title: string
   children: ReactNode
   isSaving?: boolean
+  size?: 'md' | 'lg'
 }
 
-export default function Modal({ isOpen, onClose, onSave, title, children, isSaving }: ModalProps) {
+export default function Modal({ isOpen, onClose, onSave, title, children, isSaving, size = 'md' }: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -48,7 +49,7 @@ export default function Modal({ isOpen, onClose, onSave, title, children, isSavi
       {/* Modal container */}
       <div
         ref={modalRef}
-        className="relative bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 flex flex-col max-h-[90vh]"
+        className={`relative bg-white rounded-xl shadow-xl w-full ${size === 'lg' ? 'max-w-2xl' : 'max-w-lg'} mx-4 flex flex-col max-h-[90vh]`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
