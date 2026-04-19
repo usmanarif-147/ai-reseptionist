@@ -1,11 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { DayPicker } from 'react-day-picker'
-import 'react-day-picker/style.css'
 import PageHeader from '@/components/dashboard/PageHeader'
 import Pagination from '@/components/dashboard/Pagination'
-import { dayPickerClassNames } from '@/components/dashboard/dayPickerClassNames'
+import MonthCalendar, { type MonthCalendarEvent } from '@/components/dashboard/MonthCalendar'
 import { confirmDialog } from '@/components/confirmDialog'
 
 interface Holiday {
@@ -15,13 +13,6 @@ interface Holiday {
 }
 
 const PAGE_SIZE = 5
-
-function toIsoDate(d: Date): string {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
 
 function fromIsoDate(iso: string): Date {
   const [y, m, d] = iso.split('-').map((n) => parseInt(n, 10))
@@ -85,10 +76,27 @@ export default function HolidaysPage() {
     })()
   }, [refresh])
 
-  const holidayDates = useMemo(
-    () => allHolidays.map((h) => fromIsoDate(h.holiday_date)),
-    [allHolidays],
-  )
+  const calendarEvents = useMemo<MonthCalendarEvent[]>(() => {
+    const list: MonthCalendarEvent[] = []
+    for (const h of allHolidays) {
+      list.push({
+        id: `${h.id}-bg`,
+        start: h.holiday_date,
+        allDay: true,
+        display: 'background',
+        backgroundColor: '#ef4444',
+      })
+      list.push({
+        id: h.id,
+        title: h.label || 'Holiday',
+        start: h.holiday_date,
+        allDay: true,
+        backgroundColor: '#ef4444',
+        borderColor: '#ef4444',
+      })
+    }
+    return list
+  }, [allHolidays])
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
@@ -160,8 +168,7 @@ export default function HolidaysPage() {
     await refresh(nextPage)
   }
 
-  function handleDayClick(date: Date) {
-    const iso = toIsoDate(date)
+  function handleDayClick(iso: string) {
     setFormDate(iso)
     setError('')
     setSuccess('')
@@ -196,39 +203,26 @@ export default function HolidaysPage() {
         <div className="bg-white rounded-xl border border-gray-100 p-6">
           <h2 className="text-sm font-semibold text-gray-900 mb-4">Add Holiday</h2>
 
-          <div className="flex justify-center overflow-hidden">
-            <DayPicker
-              mode="single"
-              month={month}
-              onMonthChange={setMonth}
-              selected={formDate ? fromIsoDate(formDate) : undefined}
-              onDayClick={handleDayClick}
-              modifiers={{ holiday: holidayDates }}
-              modifiersClassNames={{
-                holiday: 'bg-red-500 text-white hover:bg-red-600',
-                today: 'ring-2 ring-blue-500',
-              }}
-              classNames={{
-                ...dayPickerClassNames,
-                month_caption:
-                  'relative flex justify-center items-center h-10 font-semibold text-gray-900',
-                nav: 'absolute inset-x-2 top-1/2 -translate-y-1/2 flex items-center justify-between pointer-events-none',
-                button_previous:
-                  'p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 disabled:opacity-40 pointer-events-auto',
-                button_next:
-                  'p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 disabled:opacity-40 pointer-events-auto',
-              }}
-            />
-          </div>
+          <MonthCalendar
+            month={month}
+            onMonthChange={setMonth}
+            events={calendarEvents}
+            onDayClick={handleDayClick}
+            selectedIso={formDate || null}
+          />
 
-          <div className="mt-3 flex items-center gap-4 text-xs text-gray-600">
+          <div className="mt-3 flex items-center gap-4 text-xs text-gray-600 justify-center">
             <div className="flex items-center gap-1.5">
               <span className="inline-block w-3 h-3 rounded bg-red-500" />
               Holiday
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="inline-block w-3 h-3 rounded ring-2 ring-blue-500" />
+              <span className="inline-block w-3 h-3 rounded bg-blue-50 border border-blue-200" />
               Today
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="inline-block w-3 h-3 rounded ring-2 ring-blue-600" />
+              Selected
             </div>
           </div>
 

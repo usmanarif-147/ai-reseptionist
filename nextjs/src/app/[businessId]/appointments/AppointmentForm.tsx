@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { DayPicker } from 'react-day-picker'
 import 'react-day-picker/style.css'
 import SlotSelector from './SlotSelector'
-import { dayPickerClassNames } from './dayPickerClassNames'
+import { dayPickerClassNames } from '@/components/dashboard/dayPickerClassNames'
 import { toDate, toIsoDate, todayIso } from './utils'
 import type { DaySlots, Service, Slot, Staff } from './types'
 

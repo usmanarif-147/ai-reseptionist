@@ -1,15 +1,14 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { DayPicker } from 'react-day-picker'
-import 'react-day-picker/style.css'
 import {
   DayHoursEditor,
   emptyDaySlots,
   groupRowsByDay,
   flattenDaysToRows,
+  MonthCalendar,
 } from '@/components/dashboard'
-import type { DaySlots } from '@/components/dashboard'
+import type { DaySlots, MonthCalendarEvent } from '@/components/dashboard'
 import { confirmDialog } from '@/components/confirmDialog'
 
 interface StaffScheduleModalProps {
@@ -41,11 +40,6 @@ function toIsoDate(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, '0')
   const d = String(date.getDate()).padStart(2, '0')
   return `${y}-${m}-${d}`
-}
-
-function toDate(isoDate: string): Date {
-  const [y, m, d] = isoDate.split('-').map(Number)
-  return new Date(y, m - 1, d)
 }
 
 function toMonthParam(date: Date): string {
@@ -219,39 +213,68 @@ export default function StaffScheduleModal({
     [holidays],
   )
 
-  // Build modifier date arrays for DayPicker (restricted to visible month).
-  const { availableDates, unavailableDates, overrideDates, holidayDates } = useMemo(() => {
+  // Build FullCalendar events for the visible month: one background event per day
+  // tinted by category (holiday > override > available > unavailable), plus a
+  // small chip on override days so they stand out.
+  const calendarEvents = useMemo<MonthCalendarEvent[]>(() => {
     const year = currentMonth.getFullYear()
     const monthIdx = currentMonth.getMonth()
     const daysInMonth = new Date(year, monthIdx + 1, 0).getDate()
-    const available: Date[] = []
-    const unavailable: Date[] = []
-    const override: Date[] = []
-    const holiday: Date[] = []
+    const list: MonthCalendarEvent[] = []
 
     for (let d = 1; d <= daysInMonth; d++) {
       const date = new Date(year, monthIdx, d)
       const iso = toIsoDate(date)
+
       if (holidayIsoSet.has(iso)) {
-        holiday.push(date)
+        list.push({
+          id: `holiday-${iso}`,
+          start: iso,
+          allDay: true,
+          display: 'background',
+          backgroundColor: '#ef4444',
+        })
         continue
       }
+
       if (overrideByIso.has(iso)) {
-        override.push(date)
+        list.push({
+          id: `override-bg-${iso}`,
+          start: iso,
+          allDay: true,
+          display: 'background',
+          backgroundColor: '#fff7ed',
+        })
+        list.push({
+          id: `override-chip-${iso}`,
+          title: 'Override',
+          start: iso,
+          allDay: true,
+          backgroundColor: '#fb923c',
+          borderColor: '#fb923c',
+        })
         continue
       }
+
       if (availableDaysOfWeek.has(date.getDay())) {
-        available.push(date)
+        list.push({
+          id: `available-${iso}`,
+          start: iso,
+          allDay: true,
+          display: 'background',
+          backgroundColor: '#dcfce7',
+        })
       } else {
-        unavailable.push(date)
+        list.push({
+          id: `unavailable-${iso}`,
+          start: iso,
+          allDay: true,
+          display: 'background',
+          backgroundColor: '#f3f4f6',
+        })
       }
     }
-    return {
-      availableDates: available,
-      unavailableDates: unavailable,
-      overrideDates: override,
-      holidayDates: holiday,
-    }
+    return list
   }, [currentMonth, availableDaysOfWeek, overrideByIso, holidayIsoSet])
 
   function resetOverrideForm() {
@@ -262,9 +285,8 @@ export default function StaffScheduleModal({
     setOverrideError('')
   }
 
-  function handleDayClick(day: Date) {
+  function handleDayClick(iso: string) {
     if (savingOverride || deletingOverride) return
-    const iso = toIsoDate(day)
 
     if (holidayIsoSet.has(iso)) {
       setSelectedDate(null)
@@ -492,51 +514,13 @@ export default function StaffScheduleModal({
                 </h3>
               </div>
 
-              <div className="flex justify-center">
-                <DayPicker
-                  mode="single"
-                  month={currentMonth}
-                  onMonthChange={setCurrentMonth}
-                  selected={selectedDate ? toDate(selectedDate) : undefined}
-                  onDayClick={handleDayClick}
-                  modifiers={{
-                    available: availableDates,
-                    unavailable: unavailableDates,
-                    hasOverride: overrideDates,
-                    holiday: holidayDates,
-                  }}
-                  modifiersClassNames={{
-                    available: 'bg-green-50 text-green-700 hover:bg-green-100',
-                    unavailable: 'bg-gray-100 text-gray-400 hover:bg-gray-200',
-                    hasOverride: 'ring-2 ring-orange-400 bg-orange-50 text-orange-700 font-semibold',
-                    holiday: 'bg-red-500 text-white cursor-not-allowed',
-                    today: 'ring-2 ring-blue-500',
-                  }}
-                  classNames={{
-                    root: 'rdp text-sm',
-                    months: 'flex flex-col gap-4',
-                    month: 'space-y-3',
-                    month_caption:
-                      'flex justify-center items-center h-10 font-semibold text-gray-900',
-                    caption_label: 'text-sm font-semibold',
-                    nav: 'flex items-center justify-between absolute w-full px-2',
-                    button_previous:
-                      'p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 disabled:opacity-40',
-                    button_next:
-                      'p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 disabled:opacity-40',
-                    month_grid: 'w-full border-collapse',
-                    weekdays: 'flex',
-                    weekday:
-                      'text-xs font-medium text-gray-400 w-9 h-9 flex items-center justify-center',
-                    week: 'flex',
-                    day: 'w-9 h-9 text-sm',
-                    day_button:
-                      'w-9 h-9 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400',
-                    outside: 'text-gray-300',
-                    disabled: 'text-gray-300 cursor-not-allowed',
-                  }}
-                />
-              </div>
+              <MonthCalendar
+                month={currentMonth}
+                onMonthChange={setCurrentMonth}
+                events={calendarEvents}
+                onDayClick={handleDayClick}
+                selectedIso={selectedDate}
+              />
 
               {/* Legend */}
               <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600">

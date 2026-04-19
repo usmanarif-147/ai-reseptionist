@@ -2,9 +2,9 @@ export const dayPickerClassNames = {
   root: 'rdp text-sm',
   months: 'flex flex-col gap-4',
   month: 'space-y-3',
-  month_caption: 'flex justify-center items-center h-10 font-semibold text-gray-900',
-  caption_label: 'text-sm font-semibold',
-  nav: 'flex items-center justify-between absolute w-full px-2',
+  month_caption: 'flex items-center justify-between h-10 px-1',
+  caption_label: 'text-sm font-semibold text-gray-900',
+  nav: 'flex items-center gap-1',
   button_previous:
     'p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 disabled:opacity-40',
   button_next:
@@ -22,4 +22,5 @@ export const dayPickerClassNames = {
   range_end: 'bg-blue-600 text-white rounded-r-lg',
   range_middle: 'bg-blue-50 text-blue-700',
   selected: 'bg-blue-600 text-white',
+  today: 'font-semibold text-blue-600',
 }

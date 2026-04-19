@@ -62,8 +62,8 @@
   background-color: rgb(243 244 246) !important;
 }
 
-/* FullCalendar — dashboard theme (scoped to appointments page) */
-.appointments-fc .fc {
+/* FullCalendar — shared dashboard theme (appointments, holidays, staff overrides) */
+.dashboard-fc .fc {
   font-family: inherit;
   --fc-border-color: rgb(243 244 246);
   --fc-today-bg-color: rgb(239 246 255);
@@ -71,19 +71,19 @@
   --fc-page-bg-color: #ffffff;
 }
 
-.appointments-fc .fc .fc-toolbar.fc-header-toolbar {
+.dashboard-fc .fc .fc-toolbar.fc-header-toolbar {
   margin-bottom: 1rem;
   flex-wrap: wrap;
   gap: 0.5rem;
 }
 
-.appointments-fc .fc .fc-toolbar-title {
+.dashboard-fc .fc .fc-toolbar-title {
   font-size: 1.125rem;
   font-weight: 600;
   color: rgb(17 24 39);
 }
 
-.appointments-fc .fc .fc-button {
+.dashboard-fc .fc .fc-button {
   background-color: #ffffff;
   color: rgb(55 65 81);
   border: 1px solid rgb(229 231 235);
@@ -96,8 +96,8 @@
   transition: background-color 0.15s, border-color 0.15s;
 }
 
-.appointments-fc .fc .fc-button:hover,
-.appointments-fc .fc .fc-button:focus {
+.dashboard-fc .fc .fc-button:hover,
+.dashboard-fc .fc .fc-button:focus {
   background-color: rgb(243 244 246);
   border-color: rgb(209 213 219);
   color: rgb(17 24 39);
@@ -105,48 +105,48 @@
   outline: none;
 }
 
-.appointments-fc .fc .fc-button-primary:not(:disabled).fc-button-active,
-.appointments-fc .fc .fc-button-primary:not(:disabled):active {
+.dashboard-fc .fc .fc-button-primary:not(:disabled).fc-button-active,
+.dashboard-fc .fc .fc-button-primary:not(:disabled):active {
   background-color: rgb(37 99 235);
   border-color: rgb(37 99 235);
   color: #ffffff;
   box-shadow: none;
 }
 
-.appointments-fc .fc .fc-button:disabled {
+.dashboard-fc .fc .fc-button:disabled {
   opacity: 0.5;
 }
 
-.appointments-fc .fc .fc-button-group > .fc-button {
+.dashboard-fc .fc .fc-button-group > .fc-button {
   border-radius: 0.5rem;
 }
-.appointments-fc .fc .fc-button-group > .fc-button:not(:first-child) {
+.dashboard-fc .fc .fc-button-group > .fc-button:not(:first-child) {
   margin-left: -1px;
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
 }
-.appointments-fc .fc .fc-button-group > .fc-button:not(:last-child) {
+.dashboard-fc .fc .fc-button-group > .fc-button:not(:last-child) {
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
 }
 
-.appointments-fc .fc .fc-icon {
+.dashboard-fc .fc .fc-icon {
   font-size: 0.875rem;
   line-height: 1;
 }
 
-.appointments-fc .fc-theme-standard td,
-.appointments-fc .fc-theme-standard th,
-.appointments-fc .fc-theme-standard .fc-scrollgrid {
+.dashboard-fc .fc-theme-standard td,
+.dashboard-fc .fc-theme-standard th,
+.dashboard-fc .fc-theme-standard .fc-scrollgrid {
   border-color: rgb(243 244 246);
 }
 
-.appointments-fc .fc .fc-col-header-cell {
+.dashboard-fc .fc .fc-col-header-cell {
   background-color: rgb(249 250 251);
   padding: 0.5rem 0;
 }
 
-.appointments-fc .fc .fc-col-header-cell-cushion {
+.dashboard-fc .fc .fc-col-header-cell-cushion {
   color: rgb(107 114 128);
   font-size: 0.75rem;
   font-weight: 600;
@@ -156,46 +156,50 @@
   text-decoration: none;
 }
 
-.appointments-fc .fc .fc-daygrid-day {
+.dashboard-fc .fc .fc-daygrid-day {
   transition: background-color 0.15s;
   cursor: pointer;
 }
 
-.appointments-fc .fc .fc-daygrid-day:hover {
+.dashboard-fc .fc .fc-daygrid-day:hover {
   background-color: rgb(249 250 251);
 }
 
-.appointments-fc .fc .fc-daygrid-day-frame {
+.dashboard-fc .fc .fc-daygrid-day-frame {
   min-height: 6rem;
   padding: 0.25rem;
 }
 
-.appointments-fc .fc .fc-daygrid-day-top {
+.dashboard-fc .fc .fc-daygrid-day-top {
   justify-content: flex-start;
   width: 100%;
 }
 
-.appointments-fc .fc .fc-daygrid-day-number {
+.dashboard-fc .fc .fc-daygrid-day-number {
   color: rgb(55 65 81);
   text-decoration: none;
   padding: 0;
   width: 100%;
 }
 
-.appointments-fc .fc .fc-day-other .fc-daygrid-day-number {
+.dashboard-fc .fc .fc-day-other .fc-daygrid-day-number {
   color: rgb(209 213 219);
 }
 
-.appointments-fc .fc .fc-day-today {
+.dashboard-fc .fc .fc-day-today {
   background-color: rgb(239 246 255) !important;
 }
 
-.appointments-fc .fc .fc-day-today .fc-daygrid-day-number {
+.dashboard-fc .fc .fc-day-today .fc-daygrid-day-number {
   color: rgb(29 78 216);
   font-weight: 600;
 }
 
-.appointments-fc .fc .fc-daygrid-event {
+.dashboard-fc .fc .fc-day-selected {
+  box-shadow: inset 0 0 0 2px rgb(37 99 235);
+}
+
+.dashboard-fc .fc .fc-daygrid-event {
   border-radius: 0.25rem;
   padding: 1px 4px;
   font-size: 0.7rem;
@@ -205,7 +209,7 @@
   cursor: pointer;
 }
 
-.appointments-fc .fc .fc-daygrid-event .fc-event-title {
+.dashboard-fc .fc .fc-daygrid-event .fc-event-title {
   color: #ffffff;
   font-weight: 500;
   overflow: hidden;
@@ -213,53 +217,53 @@
   white-space: nowrap;
 }
 
-.appointments-fc .fc .fc-daygrid-event:hover {
+.dashboard-fc .fc .fc-daygrid-event:hover {
   filter: brightness(0.92);
 }
 
-.appointments-fc .fc .fc-daygrid-more-link {
+.dashboard-fc .fc .fc-daygrid-more-link {
   font-size: 0.7rem;
   color: rgb(37 99 235);
   font-weight: 500;
   padding: 0 4px;
 }
 
-.appointments-fc .fc .fc-daygrid-day-events {
+.dashboard-fc .fc .fc-daygrid-day-events {
   margin-top: 2px;
 }
 
-.appointments-fc .fc .fc-popover {
+.dashboard-fc .fc .fc-popover {
   border: 1px solid rgb(229 231 235);
   border-radius: 0.5rem;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
   z-index: 20;
 }
-.appointments-fc .fc .fc-popover-header {
+.dashboard-fc .fc .fc-popover-header {
   background-color: rgb(249 250 251);
   padding: 0.5rem 0.75rem;
   font-size: 0.75rem;
   font-weight: 600;
   color: rgb(17 24 39);
 }
-.appointments-fc .fc .fc-popover-body {
+.dashboard-fc .fc .fc-popover-body {
   padding: 0.25rem;
 }
 
-.appointments-fc .fc .fc-scrollgrid {
+.dashboard-fc .fc .fc-scrollgrid {
   border-radius: 0.5rem;
   overflow: hidden;
 }
 
 @media (max-width: 640px) {
-  .appointments-fc .fc .fc-toolbar.fc-header-toolbar {
+  .dashboard-fc .fc .fc-toolbar.fc-header-toolbar {
     flex-direction: column;
     align-items: stretch;
   }
-  .appointments-fc .fc .fc-toolbar-chunk {
+  .dashboard-fc .fc .fc-toolbar-chunk {
     display: flex;
     justify-content: center;
   }
-  .appointments-fc .fc .fc-daygrid-day-frame {
+  .dashboard-fc .fc .fc-daygrid-day-frame {
     min-height: 4rem;
   }
 }

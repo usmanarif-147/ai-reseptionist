@@ -213,7 +213,7 @@ export default function AppointmentsPage() {
           )}
         </div>
 
-        <div className="appointments-fc w-full">
+        <div className="dashboard-fc w-full">
           <FullCalendar
             plugins={[dayGridPlugin, interactionPlugin]}
             initialView="dayGridMonth"
