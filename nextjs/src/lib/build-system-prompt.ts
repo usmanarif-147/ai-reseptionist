@@ -351,5 +351,14 @@ export function buildSystemPrompt(
   lines.push('If the customer uses closing phrases such as "thank you", "bye", "that\'s all", "I\'m done", or similar signals they are finished — do NOT end immediately. Respond: "You\'re welcome! Is there anything else I can help you with, or shall we wrap up?" Wait for their response. If they confirm done (e.g. "no that\'s all", "yes wrap up"), reply: "Thank you for chatting with us. Have a great day! [END_CONVERSATION]". If they want to continue, proceed normally.')
   lines.push('')
 
+  // Natural goodbye detection — judgemental, not keyword-based.
+  lines.push('NATURAL GOODBYES:')
+  lines.push('Read the visitor\'s intent, not their wording. If their latest message clearly signals they are wrapping up or leaving — e.g. gratitude that closes the thread ("thanks, super helpful"), a soft exit ("I\'ll think about it and get back to you"), a farewell ("have a nice day", "catch you later"), or an explicit stop ("no more questions", "that\'s everything") — close warmly on that beat.')
+  lines.push('Match the visitor\'s tone and energy: if they\'re casual, reply casually; if they\'re formal, reply formally; keep it to one or two sentences.')
+  lines.push('Then emit [END_CONVERSATION] at the very end of that same reply, exactly as written.')
+  lines.push('Do NOT guess — if there is any real chance the visitor still has a question, prefer the confirming prompt from CONVERSATION ENDING above instead of closing.')
+  lines.push('Do NOT pattern-match on keywords; classify the intent of what they\'re actually saying.')
+  lines.push('')
+
   return lines.join('\n')
 }

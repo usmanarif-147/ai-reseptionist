@@ -21,6 +21,10 @@
   var sessionEnded = false;
   var sessionEndReason = null; // 'ended' or 'expired'
   var contactCardDismissed = false; // visitor hit "Not now"; don't re-render card this session
+  var currentView = 'chat'; // 'chat' | 'recent' | 'history'
+  var feedbackVisible = false; // true while the rating prompt is on-screen — drives closed_widget/closed_tab tracking
+  var resumeFromSessionId = null; // set once on Continue click; attached to the first chat POST of the new session
+  var businessName = ''; // populated from /config; rendered in Recent Chats rows
 
   // --- Appearance config (populated from API, defaults here) ---
   var cfg = {
@@ -173,7 +177,43 @@
     '.ai-widget-session-end-title { font-size: 14px; font-weight: 700; color: #111827; }',
     '.ai-widget-session-end-msg { font-size: 12px; color: #6b7280; line-height: 1.5; }',
     '.ai-widget-session-end-btn { margin-top: 8px; padding: 8px 16px; border: none; border-radius: 8px; background: var(--ai-widget-primary, #2563eb); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; transition: opacity 0.15s; }',
-    '.ai-widget-session-end-btn:hover { opacity: 0.9; }'
+    '.ai-widget-session-end-btn:hover { opacity: 0.9; }',
+    // Header action buttons (menu + back) reuse the close button's round chrome.
+    '#ai-widget-header-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }',
+    '.ai-widget-header-btn { background: rgba(255,255,255,0.15); border: none; color: #fff; width: 24px; height: 24px; border-radius: 50%; cursor: pointer; font-size: 14px; line-height: 1; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background 0.15s; padding: 0; font-family: inherit; }',
+    '.ai-widget-header-btn:hover { background: rgba(255,255,255,0.25); }',
+    // Overflow menu — positioned under the ⋯ button.
+    '#ai-widget-menu { position: absolute; top: 44px; right: 14px; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1); min-width: 140px; z-index: 10; overflow: hidden; }',
+    '.ai-widget-menu-item { display: block; width: 100%; text-align: left; background: none; border: none; padding: 9px 12px; font-size: 12px; color: #374151; cursor: pointer; font-family: inherit; transition: background 0.15s; }',
+    '.ai-widget-menu-item:hover { background: #f3f4f6; }',
+    // Positioning anchor for the dropdown menu
+    '#ai-widget-header { position: relative; }',
+    // Recent Chats + History panels occupy the same space as #ai-widget-body.
+    '#ai-widget-recent, #ai-widget-history-view { flex: 1; display: none; flex-direction: column; overflow: hidden; max-height: 260px; }',
+    '.ai-widget-panel-header { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }',
+    '.ai-widget-panel-back { background: none; border: none; color: #374151; cursor: pointer; font-size: 16px; line-height: 1; padding: 4px 6px; border-radius: 6px; display: flex; align-items: center; justify-content: center; transition: background 0.15s; }',
+    '.ai-widget-panel-back:hover { background: #f3f4f6; }',
+    '.ai-widget-panel-title { flex: 1; font-size: 13px; font-weight: 700; color: #111827; }',
+    '.ai-widget-panel-new { background: none; border: none; color: var(--ai-widget-primary, #2563eb); cursor: pointer; font-size: 20px; line-height: 1; padding: 2px 6px; border-radius: 6px; transition: background 0.15s; font-family: inherit; }',
+    '.ai-widget-panel-new:hover { background: #f3f4f6; }',
+    // Recent Chats list
+    '#ai-widget-recent-list { flex: 1; overflow-y: auto; }',
+    '.ai-widget-recent-empty { padding: 24px 16px; text-align: center; font-size: 12px; color: #6b7280; line-height: 1.5; }',
+    '.ai-widget-recent-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #f3f4f6; cursor: pointer; transition: background 0.15s; }',
+    '.ai-widget-recent-row:hover { background: #f9fafb; }',
+    '.ai-widget-recent-row:last-child { border-bottom: none; }',
+    '.ai-widget-recent-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--ai-widget-primary, #2563eb); display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }',
+    '.ai-widget-recent-main { flex: 1; min-width: 0; }',
+    '.ai-widget-recent-preview { font-size: 12px; color: #1f2937; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; }',
+    '.ai-widget-recent-biz { font-size: 11px; color: #6b7280; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
+    '.ai-widget-recent-date { font-size: 11px; color: #6b7280; flex-shrink: 0; white-space: nowrap; padding-top: 2px; }',
+    '.ai-widget-recent-loading { padding: 24px 16px; text-align: center; font-size: 12px; color: #6b7280; }',
+    // History read-only view — transcript above, Continue footer below.
+    '#ai-widget-history-messages { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }',
+    '#ai-widget-history-footer { padding: 10px 12px; border-top: 1px solid #f0f0f0; flex-shrink: 0; }',
+    '.ai-widget-continue-btn { width: 100%; padding: 9px 14px; border: none; border-radius: 8px; background: var(--ai-widget-primary, #2563eb); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; transition: opacity 0.15s; }',
+    '.ai-widget-continue-btn:hover { opacity: 0.9; }',
+    '.ai-widget-continue-btn:disabled { opacity: 0.5; cursor: not-allowed; }'
   ].join('\n');
   document.head.appendChild(style);
 
@@ -187,13 +227,34 @@
     '<div id="ai-widget-popup" aria-label="Chat with us" role="dialog" style="display:none">',
       '<div id="ai-widget-header">',
         '<div id="ai-widget-header-info"><span id="ai-widget-title">Chat with us</span><span id="ai-widget-header-sub"><span id="ai-widget-status-dot"></span> We reply instantly</span></div>',
-        '<button id="ai-widget-close" aria-label="Close chat">\u2715</button>',
+        '<div id="ai-widget-header-actions">',
+          '<button id="ai-widget-menu-btn" class="ai-widget-header-btn" aria-label="Open menu" title="Menu" style="display:none">\u22EF</button>',
+          '<button id="ai-widget-close" aria-label="Close chat">\u2715</button>',
+        '</div>',
       '</div>',
       '<div id="ai-widget-body">',
         '<div id="ai-widget-messages"></div>',
         '<div id="ai-widget-input-row">',
           '<input id="ai-widget-input" type="text" placeholder="Type a message..." aria-label="Type your message" autocomplete="off"/>',
           '<button id="ai-widget-send" aria-label="Send message"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>',
+        '</div>',
+      '</div>',
+      '<div id="ai-widget-recent">',
+        '<div class="ai-widget-panel-header">',
+          '<button class="ai-widget-panel-back" id="ai-widget-recent-back" aria-label="Back to chat">\u2190</button>',
+          '<span class="ai-widget-panel-title">Recent chats</span>',
+          '<button class="ai-widget-panel-new" id="ai-widget-recent-new" aria-label="Start new chat" title="New chat">+</button>',
+        '</div>',
+        '<div id="ai-widget-recent-list"></div>',
+      '</div>',
+      '<div id="ai-widget-history-view">',
+        '<div class="ai-widget-panel-header">',
+          '<button class="ai-widget-panel-back" id="ai-widget-history-back" aria-label="Back to recent chats">\u2190</button>',
+          '<span class="ai-widget-panel-title" id="ai-widget-history-title">Conversation</span>',
+        '</div>',
+        '<div id="ai-widget-history-messages"></div>',
+        '<div id="ai-widget-history-footer">',
+          '<button class="ai-widget-continue-btn" id="ai-widget-continue-btn">Continue this conversation</button>',
         '</div>',
       '</div>',
     '</div>'
@@ -208,6 +269,16 @@
   var messagesEl = document.getElementById('ai-widget-messages');
   var inputEl = document.getElementById('ai-widget-input');
   var sendBtn = document.getElementById('ai-widget-send');
+  var menuBtn = document.getElementById('ai-widget-menu-btn');
+  var recentEl = document.getElementById('ai-widget-recent');
+  var recentListEl = document.getElementById('ai-widget-recent-list');
+  var recentBackBtn = document.getElementById('ai-widget-recent-back');
+  var recentNewBtn = document.getElementById('ai-widget-recent-new');
+  var historyViewEl = document.getElementById('ai-widget-history-view');
+  var historyMessagesEl = document.getElementById('ai-widget-history-messages');
+  var historyBackBtn = document.getElementById('ai-widget-history-back');
+  var historyTitleEl = document.getElementById('ai-widget-history-title');
+  var continueBtn = document.getElementById('ai-widget-continue-btn');
 
   // --- Helper functions ---
   function addMessage(role, text) {
@@ -241,8 +312,201 @@
   }
 
   function showChatUI() {
+    currentView = 'chat';
+    bodyEl.style.display = 'flex';
+    recentEl.style.display = 'none';
+    historyViewEl.style.display = 'none';
     messagesEl.style.display = 'flex';
     document.getElementById('ai-widget-input-row').style.display = 'flex';
+    updateMenuButtonVisibility();
+  }
+
+  // The ⋯ menu is only meaningful while the visitor has an active session to manage.
+  // On the Session Ended / Session Expired / feedback screens it is hidden to avoid
+  // conflicting with the "Start New Conversation" CTA. In preview mode it's suppressed
+  // entirely since there is no real visitor or backend.
+  function updateMenuButtonVisibility() {
+    if (!menuBtn) return;
+    var shouldShow = !isPreview && currentView === 'chat' && !sessionEnded && !feedbackVisible && popup.style.display !== 'none';
+    menuBtn.style.display = shouldShow ? 'flex' : 'none';
+    if (!shouldShow) hideMenu();
+  }
+
+  function hideMenu() {
+    var existing = document.getElementById('ai-widget-menu');
+    if (existing) existing.remove();
+  }
+
+  function toggleMenu() {
+    var existing = document.getElementById('ai-widget-menu');
+    if (existing) { existing.remove(); return; }
+    var menu = document.createElement('div');
+    menu.id = 'ai-widget-menu';
+    menu.innerHTML = [
+      '<button class="ai-widget-menu-item" id="ai-widget-menu-new">New chat</button>',
+      '<button class="ai-widget-menu-item" id="ai-widget-menu-history">View history</button>'
+    ].join('');
+    document.getElementById('ai-widget-header').appendChild(menu);
+
+    document.getElementById('ai-widget-menu-new').addEventListener('click', function() {
+      hideMenu();
+      startNewConversation();
+    });
+    document.getElementById('ai-widget-menu-history').addEventListener('click', function() {
+      hideMenu();
+      showRecentChats();
+    });
+  }
+
+  // Dismiss the menu if the visitor clicks anywhere else inside the popup.
+  popup.addEventListener('click', function(e) {
+    var menu = document.getElementById('ai-widget-menu');
+    if (!menu) return;
+    if (menu.contains(e.target) || (menuBtn && menuBtn.contains(e.target))) return;
+    hideMenu();
+  });
+
+  function formatHistoryDate(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear();
+  }
+
+  function showRecentChats() {
+    if (isPreview) return; // preview iframe has no visitor history to fetch
+    currentView = 'recent';
+    bodyEl.style.display = 'none';
+    historyViewEl.style.display = 'none';
+    recentEl.style.display = 'flex';
+    updateMenuButtonVisibility();
+
+    recentListEl.innerHTML = '<div class="ai-widget-recent-loading">Loading\u2026</div>';
+
+    fetch(API_BASE + '/api/widget/' + businessId + '/history?visitor_id=' + encodeURIComponent(visitorId))
+      .then(function(r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function(data) {
+        renderRecentList(data && data.sessions ? data.sessions : []);
+      })
+      .catch(function() {
+        recentListEl.innerHTML = '<div class="ai-widget-recent-empty">Could not load history. Try again later.</div>';
+      });
+  }
+
+  function renderRecentList(sessions) {
+    // Don't show the in-progress session — the visitor is already in it.
+    var filtered = sessions.filter(function(s) { return s.session_id !== sessionId; });
+    if (!filtered.length) {
+      recentListEl.innerHTML = '<div class="ai-widget-recent-empty">No previous conversations yet.</div>';
+      return;
+    }
+    recentListEl.innerHTML = '';
+    var avatar = getAvatarEmoji();
+    filtered.forEach(function(s) {
+      var row = document.createElement('div');
+      row.className = 'ai-widget-recent-row';
+      row.setAttribute('data-session-id', s.session_id);
+
+      var avatarEl = document.createElement('div');
+      avatarEl.className = 'ai-widget-recent-avatar';
+      avatarEl.textContent = avatar;
+
+      var main = document.createElement('div');
+      main.className = 'ai-widget-recent-main';
+      var preview = document.createElement('div');
+      preview.className = 'ai-widget-recent-preview';
+      preview.textContent = s.last_message_preview || '(no messages)';
+      var biz = document.createElement('div');
+      biz.className = 'ai-widget-recent-biz';
+      biz.textContent = businessName || cfg.header_title || '';
+      main.appendChild(preview);
+      if (biz.textContent) main.appendChild(biz);
+
+      var date = document.createElement('div');
+      date.className = 'ai-widget-recent-date';
+      date.textContent = formatHistoryDate(s.last_message_at || s.ended_at);
+
+      row.appendChild(avatarEl);
+      row.appendChild(main);
+      row.appendChild(date);
+      row.addEventListener('click', function() { showHistoryView(s.session_id, s.last_message_at || s.ended_at); });
+      recentListEl.appendChild(row);
+    });
+  }
+
+  function showHistoryView(pastSessionId, dateHint) {
+    currentView = 'history';
+    bodyEl.style.display = 'none';
+    recentEl.style.display = 'none';
+    historyViewEl.style.display = 'flex';
+    updateMenuButtonVisibility();
+
+    historyTitleEl.textContent = formatHistoryDate(dateHint) || 'Conversation';
+    historyMessagesEl.innerHTML = '<div class="ai-widget-recent-loading">Loading\u2026</div>';
+    continueBtn.disabled = true;
+    continueBtn.setAttribute('data-session-id', pastSessionId);
+
+    fetch(API_BASE + '/api/widget/' + businessId + '/history/' + pastSessionId + '?visitor_id=' + encodeURIComponent(visitorId))
+      .then(function(r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function(data) {
+        renderHistoryTranscript(data && data.messages ? data.messages : []);
+        if (data && data.created_at) {
+          historyTitleEl.textContent = formatHistoryDate(data.created_at) || historyTitleEl.textContent;
+        }
+        continueBtn.disabled = false;
+      })
+      .catch(function() {
+        historyMessagesEl.innerHTML = '<div class="ai-widget-recent-empty">Could not load this conversation.</div>';
+      });
+  }
+
+  function renderHistoryTranscript(messages) {
+    historyMessagesEl.innerHTML = '';
+    if (!messages.length) {
+      historyMessagesEl.innerHTML = '<div class="ai-widget-recent-empty">No messages in this conversation.</div>';
+      return;
+    }
+    messages.forEach(function(m) {
+      var role = m.role === 'user' ? 'user' : 'bot';
+      var row = document.createElement('div');
+      row.className = 'ai-widget-msg-row ' + (role === 'user' ? 'user-row' : 'bot-row');
+      var bubble = document.createElement('div');
+      bubble.className = role === 'user' ? 'ai-widget-msg-user' : 'ai-widget-msg-bot';
+      // Strip end/request markers from historical AI messages so read-only view is clean.
+      var text = (m.content || '').replace(/\s*\[END_CONVERSATION\]\s*/g, '').replace(/\s*\[REQUEST_CONTACT\]\s*/g, '').trim();
+      bubble.textContent = text;
+      if (role === 'bot' && cfg.avatar_enabled) {
+        var avatarEl = document.createElement('div');
+        avatarEl.className = 'ai-widget-msg-avatar';
+        avatarEl.textContent = getAvatarEmoji();
+        row.appendChild(avatarEl);
+      }
+      row.appendChild(bubble);
+      historyMessagesEl.appendChild(row);
+    });
+    historyMessagesEl.scrollTop = historyMessagesEl.scrollHeight;
+  }
+
+  // Continue: resume an old session by starting a fresh one and tagging the first chat
+  // POST with `resume_from_session_id`. The backend prepends the old transcript to Gemini
+  // context; the widget itself does not re-render the old messages in the new thread.
+  function continuePastConversation() {
+    var pastId = continueBtn.getAttribute('data-session-id');
+    if (!pastId) return;
+    resumeFromSessionId = pastId;
+
+    // Reset session state and land in a fresh chat view — same flow as startNewConversation
+    // but without firing /session/end (the old session is already closed).
+    sessionId = null;
+    sessionEnded = false;
+    sessionEndReason = null;
+    welcomeShown = false;
+    contactCardDismissed = false;
+    localStorage.removeItem('ai-widget-session-' + businessId);
+    localStorage.removeItem(lastMsgTimeKey);
+    messagesEl.innerHTML = '';
+
+    openChat();
   }
 
   // --- Apply header config ---
@@ -412,6 +676,7 @@
       primaryColor = config.color || primaryColor;
       root.style.setProperty('--ai-widget-primary', primaryColor);
       welcomeMessage = config.welcome_message || welcomeMessage;
+      businessName = config.business_name || config.name || '';
 
       // Apply all appearance config
       cfg.tooltip_enabled = config.tooltip_enabled ?? cfg.tooltip_enabled;
@@ -532,16 +797,25 @@
 
     setInputDisabled(true);
 
+    var chatBody = {
+      session_id: sessionId,
+      message: userMsg,
+      customer_id: sessionStorage.getItem('ai-widget-customer-id-' + businessId) || null,
+      known_customer: !!localStorage.getItem(emailKey),
+      visitor_id: visitorId,
+    };
+    // resume_from_session_id is a one-shot hint for the very first message of a new session
+    // created via "Continue this conversation" — the backend uses it to prepend the old
+    // transcript into Gemini's context, then it's no longer relevant.
+    if (resumeFromSessionId) {
+      chatBody.resume_from_session_id = resumeFromSessionId;
+      resumeFromSessionId = null;
+    }
+
     fetch(API_BASE + '/api/widget/' + businessId + '/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        session_id: sessionId,
-        message: userMsg,
-        customer_id: sessionStorage.getItem('ai-widget-customer-id-' + businessId) || null,
-        known_customer: !!localStorage.getItem(emailKey),
-        visitor_id: visitorId,
-      })
+      body: JSON.stringify(chatBody)
     }).then(function(response) {
       if (!response.ok) {
         throw new Error('Request failed');
@@ -719,6 +993,8 @@
   }
 
   function showFeedbackPrompt(reason) {
+    feedbackVisible = true;
+    updateMenuButtonVisibility();
     var feedbackEl = document.createElement('div');
     feedbackEl.id = 'ai-widget-feedback';
     feedbackEl.style.cssText = 'padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;';
@@ -785,12 +1061,14 @@
       submitFeedbackBtn.disabled = true;
       submitFeedbackBtn.textContent = 'Submitting...';
 
+      feedbackVisible = false;
       postSessionEnd({
         session_id: sessionId,
         status: sessionEndReason || 'ended',
         end_reason: 'natural',
         feedback_rating: selectedRating > 0 ? selectedRating : null,
-        feedback_note: feedbackNote || null
+        feedback_note: feedbackNote || null,
+        review_action: 'given'
       })
         .then(function() { showEndingMessage(sessionEndReason); })
         .catch(function() { showEndingMessage(sessionEndReason); });
@@ -804,12 +1082,14 @@
       // Preview mode: no-op — keeps the demo stable on the feedback screen.
       if (isPreview) return;
 
+      feedbackVisible = false;
       postSessionEnd({
         session_id: sessionId,
         status: sessionEndReason || 'ended',
         end_reason: 'natural',
         feedback_rating: null,
-        feedback_note: null
+        feedback_note: null,
+        review_action: 'skipped'
       })
         .then(function() { showEndingMessage(sessionEndReason); })
         .catch(function() { showEndingMessage(sessionEndReason); });
@@ -829,6 +1109,7 @@
   }
 
   function showEndingMessage(reason) {
+    feedbackVisible = false;
     // Remove feedback form
     var feedbackEl = document.getElementById('ai-widget-feedback');
     if (feedbackEl) feedbackEl.remove();
@@ -847,6 +1128,8 @@
   }
 
   function showSessionEndScreen(reason) {
+    feedbackVisible = false;
+    updateMenuButtonVisibility();
     // Hide messages and input
     messagesEl.style.display = 'none';
     document.getElementById('ai-widget-input-row').style.display = 'none';
@@ -966,12 +1249,26 @@
       openChat();
       inputEl.focus();
     } else {
+      // Closing via the launcher while the feedback prompt is visible counts as
+      // abandoning the review. Record it before the popup hides.
+      if (feedbackVisible) {
+        postReviewActionBeacon('closed_widget');
+        feedbackVisible = false;
+      }
+      hideMenu();
+      updateMenuButtonVisibility();
       stopInactivityTimer();
     }
   });
 
   closeBtn.addEventListener('click', function() {
+    if (feedbackVisible) {
+      postReviewActionBeacon('closed_widget');
+      feedbackVisible = false;
+    }
+    hideMenu();
     popup.style.display = 'none';
+    updateMenuButtonVisibility();
     stopInactivityTimer();
   });
 
@@ -986,6 +1283,49 @@
       sendMessage(inputEl.value);
       inputEl.value = '';
     }
+  });
+
+  // --- History UI wiring ---
+  menuBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    toggleMenu();
+  });
+  recentBackBtn.addEventListener('click', function() { showChatUI(); });
+  recentNewBtn.addEventListener('click', function() { startNewConversation(); });
+  historyBackBtn.addEventListener('click', function() { showRecentChats(); });
+  continueBtn.addEventListener('click', function() { continuePastConversation(); });
+
+  // --- Review action tracking ---
+  // When the visitor is looking at the feedback prompt and the widget is closed or the tab
+  // is navigated away from, record what happened so the business can tell a genuine "skip"
+  // (they saw the prompt and dismissed it) from a ghost close (they walked off).
+  function postReviewActionBeacon(action) {
+    if (isPreview || !sessionId) return;
+    var payload = JSON.stringify({
+      session_id: sessionId,
+      status: sessionEndReason || 'ended',
+      end_reason: 'natural',
+      feedback_rating: null,
+      feedback_note: null,
+      review_action: action
+    });
+    try {
+      if (navigator.sendBeacon) {
+        var blob = new Blob([payload], { type: 'application/json' });
+        navigator.sendBeacon(API_BASE + '/api/widget/' + businessId + '/session/end', blob);
+        return;
+      }
+    } catch (e) { /* fall through to fetch */ }
+    fetch(API_BASE + '/api/widget/' + businessId + '/session/end', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: payload,
+      keepalive: true
+    }).catch(function() {});
+  }
+
+  window.addEventListener('beforeunload', function() {
+    if (feedbackVisible) postReviewActionBeacon('closed_tab');
   });
 
   // ===================================================================================

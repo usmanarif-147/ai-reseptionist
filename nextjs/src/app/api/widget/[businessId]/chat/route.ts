@@ -33,7 +33,14 @@ export async function POST(
     )
   }
 
-  let body: { session_id?: string; message?: string; customer_id?: string; intent?: string; visitor_id?: string }
+  let body: {
+    session_id?: string
+    message?: string
+    customer_id?: string
+    intent?: string
+    visitor_id?: string
+    resume_from_session_id?: string
+  }
   try {
     body = await request.json()
   } catch {
@@ -215,6 +222,34 @@ export async function POST(
     })
   }
 
+  // Resume context: if the widget asked to resume from a prior session, pull that
+  // session's messages so we can prepend them to the Gemini context. We only
+  // honour the request if the prior session belongs to the same business and,
+  // when a visitor_id is supplied, to the same visitor.
+  const resumeFromSessionId = body.resume_from_session_id
+  let resumeMessages: { role: string; content: string }[] = []
+  if (resumeFromSessionId && UUID_REGEX.test(resumeFromSessionId)) {
+    const { data: priorSession } = await supabase
+      .from('chat_sessions')
+      .select('id, business_id, visitor_id')
+      .eq('id', resumeFromSessionId)
+      .eq('business_id', businessId)
+      .single()
+
+    const visitorOwnsPrior =
+      priorSession &&
+      (!body.visitor_id || priorSession.visitor_id === body.visitor_id)
+
+    if (visitorOwnsPrior) {
+      const { data: priorMessages } = await supabase
+        .from('chat_messages')
+        .select('role, content')
+        .eq('session_id', resumeFromSessionId)
+        .order('created_at', { ascending: true })
+      resumeMessages = priorMessages ?? []
+    }
+  }
+
   // Fetch business data, widget settings, and conversation history in parallel
   const [
     { data: businessData },
@@ -318,11 +353,19 @@ export async function POST(
     content: trimmedMessage,
   })
 
-  // Build conversation contents for Gemini (history before the current message)
-  const conversationHistory = (history ?? []).map((m) => ({
-    role: m.role === 'user' ? 'user' : 'model',
-    parts: [{ text: m.content as string }],
-  }))
+  // Build conversation contents for Gemini (history before the current message).
+  // Prior-session messages are prepended so the AI knows what was already discussed
+  // when the visitor clicked "Continue this conversation".
+  const conversationHistory = [
+    ...resumeMessages.map((m) => ({
+      role: m.role === 'user' ? 'user' : 'model',
+      parts: [{ text: m.content as string }],
+    })),
+    ...(history ?? []).map((m) => ({
+      role: m.role === 'user' ? 'user' : 'model',
+      parts: [{ text: m.content as string }],
+    })),
+  ]
 
   const encoder = new TextEncoder()
 
