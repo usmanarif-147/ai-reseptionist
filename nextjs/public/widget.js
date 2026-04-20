@@ -6,6 +6,14 @@
   if (!businessId) return;
 
   var API_BASE = script.src.replace('/widget.js', '');
+
+  // Preview mode: activated by ?preview=1 on the host page. Stubs all backend calls, disables the
+  // inactivity timer, and accepts postMessage commands from the parent frame for the dashboard's
+  // Live Preview iframe. Flag is false on real customer sites, so production behavior is unchanged.
+  var isPreview = false;
+  try {
+    isPreview = new URLSearchParams(window.location.search).get('preview') === '1';
+  } catch (e) { isPreview = false; }
   var primaryColor = '#2563eb';
   var sessionId = localStorage.getItem('ai-widget-session-' + businessId) || null;
   var intentKey = 'ai-widget-intent-' + businessId;
@@ -85,9 +93,11 @@
     visitorId = crypto.randomUUID();
     localStorage.setItem(visitorKey, visitorId);
   }
-  // Fire-and-forget ping
-  fetch(API_BASE + '/api/widget/' + businessId + '/visitor-ping?visitor_id=' + visitorId)
-    .catch(function() {}); // silent — never block UI
+  // Fire-and-forget ping (skipped in preview mode — no backend should be touched)
+  if (!isPreview) {
+    fetch(API_BASE + '/api/widget/' + businessId + '/visitor-ping?visitor_id=' + visitorId)
+      .catch(function() {}); // silent — never block UI
+  }
 
   // --- Return visitor check ---
   var emailKey = 'ai-widget-email-' + businessId;
@@ -408,6 +418,9 @@
   }
 
   function handlePreChatSubmit() {
+    // Preview mode: submit is a no-op so the form sits visible without validation or network calls.
+    if (isPreview) return;
+
     var emailInput = document.getElementById('ai-pcf-email');
     var nameInput = document.getElementById('ai-pcf-name');
     var phoneInput = document.getElementById('ai-pcf-phone');
@@ -505,8 +518,15 @@
   // --- Config fetch ---
   var welcomeMessage = 'How can we help you today?';
   var welcomeShown = false;
-  fetch(API_BASE + '/api/widget/' + businessId + '/config')
-    .then(function(r) { return r.ok ? r.json() : Promise.reject(r.status); })
+
+  // In preview mode we skip the /config network call and bootstrap with built-in defaults so the
+  // widget renders immediately. The parent iframe will push the real settings via postMessage.
+  var configPromise = isPreview
+    ? Promise.resolve({})
+    : fetch(API_BASE + '/api/widget/' + businessId + '/config')
+        .then(function(r) { return r.ok ? r.json() : Promise.reject(r.status); });
+
+  configPromise
     .then(function(config) {
       primaryColor = config.color || primaryColor;
       root.style.setProperty('--ai-widget-primary', primaryColor);
@@ -545,9 +565,11 @@
       // Apply header config
       applyHeaderConfig();
 
-      // Inject tooltip if enabled and not dismissed
+      // Inject tooltip if enabled and not dismissed.
+      // Preview mode skips this — the parent iframe drives tooltip rendering via postMessage
+      // so toggling `tooltip_enabled` in the dashboard reflects instantly (including dismissal-free).
       var tooltipDismissed = sessionStorage.getItem(tooltipDismissedKey);
-      if (cfg.tooltip_enabled && !tooltipDismissed) {
+      if (!isPreview && cfg.tooltip_enabled && !tooltipDismissed) {
         var tip = document.createElement('div');
         tip.id = 'ai-widget-tooltip';
         tip.className = cfg.tooltip_position === 'above' ? 'tooltip-above' : 'tooltip-side';
@@ -598,6 +620,17 @@
     if (!userMsg || sessionEnded) return;
 
     addMessage('user', userMsg);
+
+    // In preview mode, render a canned bot reply so bubble colors/spacing/avatar are visible
+    // without any backend call. Skip the real SSE pipeline entirely.
+    if (isPreview) {
+      setInputDisabled(true);
+      setTimeout(function() {
+        addMessage('bot', 'This is a sample response from our AI.');
+        setInputDisabled(false);
+      }, 400);
+      return;
+    }
 
     // Show typing indicator based on config
     var typingBubble = null;
@@ -708,6 +741,8 @@
 
   // --- Inactivity timer functions ---
   function startInactivityTimer() {
+    // Preview mode never auto-expires — the dashboard controls which screen is shown.
+    if (isPreview) return;
     stopInactivityTimer();
     inactivityTimer = setTimeout(function() {
       endSessionDueToInactivity();
@@ -728,17 +763,24 @@
     }
   }
 
-  function endSessionDueToInactivity() {
-    // Mark session as expired in the DB immediately (fire-and-forget)
-    fetch(API_BASE + '/api/widget/' + businessId + '/session/end', {
+  // Fire-and-forget session-end POST. In preview mode this is a silent no-op so the dashboard's
+  // live preview never writes to the real DB. Returns a resolved promise so callers that chain
+  // `.then()` continue to work identically.
+  function postSessionEnd(payload) {
+    if (isPreview) return Promise.resolve();
+    return fetch(API_BASE + '/api/widget/' + businessId + '/session/end', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        session_id: sessionId,
-        status: 'expired',
-        feedback_rating: null,
-        feedback_note: null
-      })
+      body: JSON.stringify(payload)
+    });
+  }
+
+  function endSessionDueToInactivity() {
+    postSessionEnd({
+      session_id: sessionId,
+      status: 'expired',
+      feedback_rating: null,
+      feedback_note: null
     }).catch(function() {});
 
     if (cfg.session_expired_enabled) {
@@ -773,16 +815,11 @@
     } else {
       // Skip feedback, go straight to ending message or session end screen
       setTimeout(function() {
-        // Fire-and-forget session end
-        fetch(API_BASE + '/api/widget/' + businessId + '/session/end', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            session_id: sessionId,
-            status: reason || 'ended',
-            feedback_rating: null,
-            feedback_note: null
-          })
+        postSessionEnd({
+          session_id: sessionId,
+          status: reason || 'ended',
+          feedback_rating: null,
+          feedback_note: null
         }).catch(function() {});
         showEndingMessage(reason);
       }, delay);
@@ -849,19 +886,18 @@
     submitFeedbackBtn.style.cssText = 'flex: 1; padding: 8px 16px; border: none; border-radius: 8px; background: ' + primaryColor + '; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; transition: opacity 0.15s;';
 
     submitFeedbackBtn.addEventListener('click', function() {
+      // Preview mode: never leaves the feedback screen — it's demoing the prompt, not collecting it.
+      if (isPreview) return;
+
       var feedbackNote = noteField.value.trim();
       submitFeedbackBtn.disabled = true;
       submitFeedbackBtn.textContent = 'Submitting...';
 
-      fetch(API_BASE + '/api/widget/' + businessId + '/session/end', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: sessionId,
-          status: sessionEndReason || 'ended',
-          feedback_rating: selectedRating > 0 ? selectedRating : null,
-          feedback_note: feedbackNote || null
-        })
+      postSessionEnd({
+        session_id: sessionId,
+        status: sessionEndReason || 'ended',
+        feedback_rating: selectedRating > 0 ? selectedRating : null,
+        feedback_note: feedbackNote || null
       })
         .then(function() { showEndingMessage(sessionEndReason); })
         .catch(function() { showEndingMessage(sessionEndReason); });
@@ -872,15 +908,14 @@
     skipBtn.style.cssText = 'padding: 8px 12px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; color: #374151; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; transition: opacity 0.15s;';
 
     skipBtn.addEventListener('click', function() {
-      fetch(API_BASE + '/api/widget/' + businessId + '/session/end', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: sessionId,
-          status: sessionEndReason || 'ended',
-          feedback_rating: null,
-          feedback_note: null
-        })
+      // Preview mode: no-op — keeps the demo stable on the feedback screen.
+      if (isPreview) return;
+
+      postSessionEnd({
+        session_id: sessionId,
+        status: sessionEndReason || 'ended',
+        feedback_rating: null,
+        feedback_note: null
       })
         .then(function() { showEndingMessage(sessionEndReason); })
         .catch(function() { showEndingMessage(sessionEndReason); });
@@ -1068,4 +1103,209 @@
       inputEl.value = '';
     }
   });
+
+  // ===================================================================================
+  // Preview mode bridge
+  // -----------------------------------------------------------------------------------
+  // When the widget is hosted by the dashboard's Live Preview iframe (?preview=1), the
+  // parent window drives it via postMessage instead of the normal user interactions.
+  // Everything below is guarded by `if (isPreview)` so customer sites are untouched.
+  // ===================================================================================
+  if (isPreview) {
+    // Tracks the most recent screen requested by the parent so appearance changes can
+    // re-render the correct surface (e.g. bumping intent colors must update the intent
+    // buttons that are currently on screen).
+    var previewCurrentScreen = 'launcher';
+
+    function previewClearScreens() {
+      var ids = ['ai-widget-intent', 'ai-widget-prechat', 'ai-widget-session-end', 'ai-widget-feedback', 'ai-widget-new-conv'];
+      for (var i = 0; i < ids.length; i++) {
+        var el = document.getElementById(ids[i]);
+        if (el) el.remove();
+      }
+      messagesEl.innerHTML = '';
+    }
+
+    function previewResetSessionState() {
+      sessionEnded = false;
+      sessionEndReason = null;
+      welcomeShown = false;
+      setInputDisabled(false);
+    }
+
+    function previewShowLauncher() {
+      popup.style.display = 'none';
+      previewClearScreens();
+      previewResetSessionState();
+    }
+
+    function previewShowIntent() {
+      popup.style.display = 'flex';
+      previewClearScreens();
+      previewResetSessionState();
+      showIntentSelection(false);
+      hideChatUI();
+    }
+
+    function previewShowPreChat() {
+      popup.style.display = 'flex';
+      previewClearScreens();
+      previewResetSessionState();
+      // currentIntent drives whether the appointment-number field shows. Default to a
+      // benign value so the form renders without the extra field.
+      currentIntent = 'basic_information';
+      showPreChatForm();
+    }
+
+    function previewShowChat() {
+      popup.style.display = 'flex';
+      previewClearScreens();
+      previewResetSessionState();
+      // Wipe intent/prechat DOM, mount chat UI, then seed a realistic exchange so the
+      // reviewer can see bubble colors, avatar, and spacing at a glance.
+      var intentEl = document.getElementById('ai-widget-intent');
+      if (intentEl) intentEl.remove();
+      var prechatEl = document.getElementById('ai-widget-prechat');
+      if (prechatEl) prechatEl.remove();
+      showChatUI();
+      welcomeShown = true;
+      addMessage('user', 'Hi, do you have availability this week?');
+      addMessage('bot', 'This is a sample response from our AI.');
+    }
+
+    function previewShowFeedback() {
+      popup.style.display = 'flex';
+      previewClearScreens();
+      previewResetSessionState();
+      showChatUI();
+      sessionEndReason = 'ended';
+      // Input row is hidden during feedback on real sessions — mirror that here.
+      document.getElementById('ai-widget-input-row').style.display = 'none';
+      showFeedbackPrompt('ended');
+    }
+
+    function previewShowEnded() {
+      popup.style.display = 'flex';
+      previewClearScreens();
+      previewResetSessionState();
+      showChatUI();
+      document.getElementById('ai-widget-input-row').style.display = 'none';
+      showSessionEndScreen('ended');
+    }
+
+    function previewShowExpired() {
+      popup.style.display = 'flex';
+      previewClearScreens();
+      previewResetSessionState();
+      showChatUI();
+      document.getElementById('ai-widget-input-row').style.display = 'none';
+      showSessionEndScreen('expired');
+    }
+
+    function previewShowScreen(screen) {
+      previewCurrentScreen = screen;
+      switch (screen) {
+        case 'launcher': previewShowLauncher(); break;
+        case 'intent':   previewShowIntent(); break;
+        case 'prechat':  previewShowPreChat(); break;
+        case 'chat':     previewShowChat(); break;
+        case 'feedback': previewShowFeedback(); break;
+        case 'ended':    previewShowEnded(); break;
+        case 'expired':  previewShowExpired(); break;
+        default: break;
+      }
+    }
+
+    // Merges partial settings into cfg, applies primary color + header, and re-renders
+    // the current screen so visual changes (intent colors, icons, copy, avatar) appear
+    // immediately without a manual reload.
+    function applyPreviewAppearance(settings) {
+      if (!settings || typeof settings !== 'object') return;
+
+      if (typeof settings.color === 'string') {
+        primaryColor = settings.color;
+        root.style.setProperty('--ai-widget-primary', primaryColor);
+      }
+      if (typeof settings.welcome_message === 'string') {
+        welcomeMessage = settings.welcome_message;
+      }
+
+      // Copy every known cfg key the parent may send. Using `in` so explicit false/empty
+      // string values aren't dropped by `||`-style fallbacks.
+      var keys = [
+        'tooltip_enabled','tooltip_text','tooltip_bg_color','tooltip_text_color','tooltip_position',
+        'intent_title','intent_description','intent_color_1','intent_color_2','intent_color_3','intent_border_radius',
+        'avatar_enabled','avatar_selection',
+        'header_show_status','header_title','header_subtitle',
+        'typing_indicator_style',
+        'session_ended_enabled','session_ended_icon','session_ended_title','session_ended_message',
+        'session_expired_enabled','session_expired_icon','session_expired_title','session_expired_message',
+        'feedback_enabled','feedback_prompt_title','feedback_note_placeholder'
+      ];
+      for (var i = 0; i < keys.length; i++) {
+        var k = keys[i];
+        if (k in settings) cfg[k] = settings[k];
+      }
+
+      applyHeaderConfig();
+      previewRenderTooltip();
+
+      // Re-render whatever screen is currently showing so the new appearance takes effect.
+      // Launcher has no screen content to re-render.
+      if (previewCurrentScreen && previewCurrentScreen !== 'launcher') {
+        previewShowScreen(previewCurrentScreen);
+      }
+    }
+
+    // Rebuild the tooltip DOM from the current cfg. Removes any existing tooltip first so
+    // repeated appearance pushes (color, text, position) re-render cleanly. Dismissal is
+    // intentionally ignored in preview so the reviewer can keep iterating on the tooltip.
+    function previewRenderTooltip() {
+      var existing = document.getElementById('ai-widget-tooltip');
+      if (existing) existing.remove();
+      if (!cfg.tooltip_enabled) return;
+
+      var tip = document.createElement('div');
+      tip.id = 'ai-widget-tooltip';
+      tip.className = cfg.tooltip_position === 'above' ? 'tooltip-above' : 'tooltip-side';
+      tip.style.backgroundColor = cfg.tooltip_bg_color;
+      tip.style.color = cfg.tooltip_text_color;
+      tip.innerHTML = '<span id="ai-widget-tooltip-text">' + escapeHtml(cfg.tooltip_text) + '</span>'
+        + '<button id="ai-widget-tooltip-close" aria-label="Dismiss" style="color:' + cfg.tooltip_text_color + '">\u00D7</button>';
+      root.appendChild(tip);
+
+      var arrowStyle = document.createElement('style');
+      if (cfg.tooltip_position === 'above') {
+        arrowStyle.textContent = '#ai-widget-tooltip.tooltip-above::after { border-top-color: ' + cfg.tooltip_bg_color + '; }';
+      } else {
+        arrowStyle.textContent = '#ai-widget-tooltip.tooltip-side::after { border-left-color: ' + cfg.tooltip_bg_color + '; }';
+      }
+      document.head.appendChild(arrowStyle);
+
+      // Close button hides the tooltip for the remainder of the preview session.
+      document.getElementById('ai-widget-tooltip-close').addEventListener('click', function() {
+        tip.remove();
+      });
+    }
+
+    window.addEventListener('message', function(event) {
+      var data = event.data;
+      if (!data || typeof data !== 'object') return;
+      if (data.type === 'appearance') {
+        applyPreviewAppearance(data.settings);
+      } else if (data.type === 'screen' && typeof data.screen === 'string') {
+        previewShowScreen(data.screen);
+      }
+    });
+
+    // Ensure the launcher button is visible without waiting on the stubbed config fetch
+    // (it resolves with {}, but this guarantees the initial paint).
+    btn.style.display = 'flex';
+
+    // Let the parent know we're ready to receive messages. Parent can respond by
+    // pushing the initial appearance + screen state.
+    try {
+      window.parent.postMessage({ type: 'widget-preview-ready' }, '*');
+    } catch (e) { /* parent may be cross-origin in odd setups — safe to ignore */ }
+  }
 })();
