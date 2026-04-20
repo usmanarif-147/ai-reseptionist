@@ -31,6 +31,7 @@ export async function POST(
     feedback_rating?: number
     feedback_note?: string
     status?: string
+    end_reason?: string
   }
   try {
     body = await request.json()
@@ -41,7 +42,14 @@ export async function POST(
     )
   }
 
-  const { session_id, feedback_rating, feedback_note, status } = body
+  const { session_id, feedback_rating, feedback_note, status, end_reason } = body
+
+  if (end_reason !== undefined && end_reason !== null && typeof end_reason !== 'string') {
+    return NextResponse.json(
+      { error: 'end_reason must be a string' },
+      { status: 400, headers: CORS_HEADERS }
+    )
+  }
 
   if (!session_id || !UUID_REGEX.test(session_id)) {
     return NextResponse.json(

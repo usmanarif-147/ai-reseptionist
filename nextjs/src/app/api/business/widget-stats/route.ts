@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticateAndGetBusiness } from '@/lib/auth'
+import { reapStaleSessions } from '@/lib/reap-stale-sessions'
 import { classifyVisitor, VisitorTier } from '@/lib/widget-customer-type'
 
 function getDateRange(range: string, fromParam?: string, toParam?: string): { from: string; to: string } {
@@ -53,6 +54,8 @@ export async function GET(request: NextRequest) {
 
   const { from, to } = getDateRange(range, fromParam, toParam)
   const businessId = business.id
+
+  await reapStaleSessions(businessId)
 
   try {
     const [

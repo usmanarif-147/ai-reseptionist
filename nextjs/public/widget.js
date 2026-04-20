@@ -86,6 +86,12 @@
   }
 
   // --- Return visitor check ---
+  // 10-minute resume rule: if the same visitor returns within 10 minutes of their last message,
+  // the existing session is resumed (see canResumeSession()). After 10 minutes, the old session
+  // is reaped as 'expired' — either by the client-side inactivity timer below, or by the
+  // server-side sweep in src/lib/reap-stale-sessions.ts (runs on widget-stats requests). The
+  // 10-minute window in the resume check, the inactivity timer, and the server reaper are all
+  // intentionally aligned so a session's state is consistent across client and server.
   var emailKey = 'ai-widget-email-' + businessId;
   var storedEmail = localStorage.getItem(emailKey);
 
@@ -653,29 +659,37 @@
     });
   }
 
+  // Inactivity path: POST /session/end with end_reason='inactivity_timeout', then render the
+  // Session Expired screen directly (bypassing transitionToEndingState so the feedback prompt
+  // is never shown — by definition the visitor has walked away). If the business has disabled
+  // the Session Expired screen, fall back to an inline "closed" message + Start New Conversation.
   function endSessionDueToInactivity() {
     postSessionEnd({
       session_id: sessionId,
       status: 'expired',
+      end_reason: 'inactivity_timeout',
       feedback_rating: null,
       feedback_note: null
     }).catch(function() {});
 
+    sessionEnded = true;
+    sessionEndReason = 'expired';
+    stopInactivityTimer();
+    setInputDisabled(true);
+    document.getElementById('ai-widget-input-row').style.display = 'none';
+
     if (cfg.session_expired_enabled) {
-      transitionToEndingState('expired');
+      setTimeout(function() { showSessionEndScreen('expired'); }, 1000);
     } else {
-      // Just disable input and show a simple message
       addMessage('bot', 'This conversation has been automatically closed due to inactivity.');
-      sessionEnded = true;
-      sessionEndReason = 'expired';
-      stopInactivityTimer();
-      setInputDisabled(true);
-      document.getElementById('ai-widget-input-row').style.display = 'none';
       showNewConversationButton();
     }
   }
 
   // --- Session ending state ---
+  // Natural-end path only: the AI emitted [END_CONVERSATION]. The visitor is present, so this
+  // is the only moment the feedback prompt can reach a real person (the inactivity path has its
+  // own dedicated handler that skips feedback). See plan 04 for the full rationale.
   function transitionToEndingState(reason) {
     sessionEnded = true;
     sessionEndReason = reason;
@@ -683,19 +697,19 @@
     setInputDisabled(true);
     document.getElementById('ai-widget-input-row').style.display = 'none';
 
-    var delay = reason === 'expired' ? 1000 : 500;
+    var delay = 500;
 
-    // Check if feedback is enabled
     if (cfg.feedback_enabled) {
       setTimeout(function() {
         showFeedbackPrompt(reason);
       }, delay);
     } else {
-      // Skip feedback, go straight to ending message or session end screen
+      // Feedback disabled by the business — POST /session/end ourselves, then show the screen.
       setTimeout(function() {
         postSessionEnd({
           session_id: sessionId,
           status: reason || 'ended',
+          end_reason: 'natural',
           feedback_rating: null,
           feedback_note: null
         }).catch(function() {});
@@ -774,6 +788,7 @@
       postSessionEnd({
         session_id: sessionId,
         status: sessionEndReason || 'ended',
+        end_reason: 'natural',
         feedback_rating: selectedRating > 0 ? selectedRating : null,
         feedback_note: feedbackNote || null
       })
@@ -792,6 +807,7 @@
       postSessionEnd({
         session_id: sessionId,
         status: sessionEndReason || 'ended',
+        end_reason: 'natural',
         feedback_rating: null,
         feedback_note: null
       })
@@ -880,6 +896,21 @@
   }
 
   function startNewConversation() {
+    // If the visitor clicks "Start New Conversation" on an active session (i.e. they hit the
+    // button without the session having already been ended server-side), fire /session/end with
+    // end_reason='user_ended' so session accounting stays complete. When the button shows after
+    // an expired-/ended-screen, /session/end has already been POSTed on that path, so we skip
+    // here (sessionEnded is true in that case) to avoid a duplicate call.
+    if (sessionId && !sessionEnded) {
+      postSessionEnd({
+        session_id: sessionId,
+        status: 'ended',
+        end_reason: 'user_ended',
+        feedback_rating: null,
+        feedback_note: null
+      }).catch(function() {});
+    }
+
     // Clear session data (keep email and visitor ID)
     sessionId = null;
     sessionEnded = false;
