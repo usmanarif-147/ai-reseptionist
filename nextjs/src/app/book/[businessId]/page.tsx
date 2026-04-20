@@ -1,11 +1,12 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { StepIndicator } from './components/StepIndicator'
 import { StepService } from './components/StepService'
 import { StepStaff } from './components/StepStaff'
 import { StepSlots } from './components/StepSlots'
+import { StepCustomerDetails } from './components/StepCustomerDetails'
 import { StepPayment } from './components/StepPayment'
 import { StepConfirm } from './components/StepConfirm'
 import { SuccessView } from './components/SuccessView'
@@ -14,26 +15,16 @@ import { WizardFooter } from './components/WizardFooter'
 import { ErrorBanner } from './components/ErrorBanner'
 import type {
   Appointment,
-  CustomerInfo,
   DaySlots,
-  PaymentMethod,
   Service,
   Slot,
   StaffMember,
+  Step,
+  WizardState,
 } from './components/types'
 
-type Step = 1 | 2 | 3 | 4 | 5
-
-interface WizardState {
-  currentStep: Step
-  completedSteps: Set<number>
-  selectedService: Service | null
-  selectedStaff: StaffMember | null
-  selectedDate: string | null
-  selectedSlot: Slot | null
-  paymentMethod: PaymentMethod
-  customerInfo: CustomerInfo
-}
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 const INITIAL_STATE: WizardState = {
   currentStep: 1,
@@ -48,8 +39,17 @@ const INITIAL_STATE: WizardState = {
 
 export default function BookingWizardPage() {
   const { businessId } = useParams<{ businessId: string }>()
+  const searchParams = useSearchParams()
 
-  const [state, setState] = useState<WizardState>(INITIAL_STATE)
+  const [state, setState] = useState<WizardState>(() => {
+    const sessionParam = searchParams.get('session') || undefined
+    const visitorParam = searchParams.get('visitor') || undefined
+    return {
+      ...INITIAL_STATE,
+      chatSessionId: sessionParam && UUID_REGEX.test(sessionParam) ? sessionParam : undefined,
+      visitorId: visitorParam || undefined,
+    }
+  })
   const [services, setServices] = useState<Service[] | null>(null)
   const [staff, setStaff] = useState<StaffMember[] | null>(null)
   const [days, setDays] = useState<DaySlots[] | null>(null)
@@ -58,9 +58,9 @@ export default function BookingWizardPage() {
   const [submitErrorCode, setSubmitErrorCode] = useState<number | null>(null)
   const [validationError, setValidationError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [customerSubmitting, setCustomerSubmitting] = useState(false)
   const [confirmedAppointment, setConfirmedAppointment] = useState<Appointment | null>(null)
 
-  // Step 1 — fetch services on mount
   useEffect(() => {
     let cancelled = false
     async function load() {
@@ -80,7 +80,6 @@ export default function BookingWizardPage() {
     }
   }, [businessId])
 
-  // Step 2 — fetch staff when a service is selected
   const fetchStaff = useCallback(
     async (serviceId: string) => {
       setStaff(null)
@@ -98,7 +97,6 @@ export default function BookingWizardPage() {
     [businessId]
   )
 
-  // Step 3 — fetch slots
   const fetchSlots = useCallback(
     async (staffId: string, serviceId: string) => {
       setDays(null)
@@ -118,7 +116,6 @@ export default function BookingWizardPage() {
     [businessId]
   )
 
-  // Handle service selection -> fetch staff -> maybe auto-skip to step 3
   const handleSelectService = useCallback(
     async (service: Service) => {
       setState((prev) => ({
@@ -166,10 +163,6 @@ export default function BookingWizardPage() {
     setState((prev) => ({ ...prev, selectedDate: date, selectedSlot: null }))
   }, [])
 
-  const goToStep = useCallback((step: Step) => {
-    setState((prev) => ({ ...prev, currentStep: step }))
-  }, [])
-
   const handlePrevious = useCallback(() => {
     setState((prev) => {
       if (prev.currentStep === 1) return prev
@@ -179,14 +172,40 @@ export default function BookingWizardPage() {
       nextCompleted.delete(nextStep)
       return { ...prev, currentStep: nextStep, completedSteps: nextCompleted }
     })
+    setValidationError(null)
+    setSubmitError(null)
+    setSubmitErrorCode(null)
   }, [])
 
+  const upsertWidgetCustomer = useCallback(async (): Promise<string | null> => {
+    const { visitorId, chatSessionId, customerInfo } = state
+    if (!visitorId) return null
+    const email = customerInfo.email.trim()
+    if (!email) return null
+    try {
+      const res = await fetch(`/api/widget/${businessId}/customer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          name: customerInfo.name.trim() || null,
+          phone: customerInfo.phone.trim() || null,
+          visitor_id: visitorId,
+          session_id: chatSessionId || undefined,
+        }),
+      })
+      if (!res.ok) return null
+      const data: { id?: string; customer_id?: string } = await res.json()
+      return data.id || data.customer_id || null
+    } catch {
+      return null
+    }
+  }, [businessId, state])
+
   const handleNext = useCallback(async () => {
-    const { currentStep, selectedService, selectedStaff } = state
+    const { currentStep, selectedService, selectedStaff, customerInfo } = state
 
     if (currentStep === 1 && selectedService) {
-      // Staff should already be loaded from handleSelectService; if solo shortcut ran,
-      // currentStep is already 3 and we won't reach here.
       setState((prev) => ({
         ...prev,
         currentStep: 2,
@@ -219,17 +238,51 @@ export default function BookingWizardPage() {
     }
 
     if (currentStep === 4) {
+      const name = customerInfo.name.trim()
+      const email = customerInfo.email.trim()
+
+      if (!name) {
+        setValidationError('Please enter your name.')
+        return
+      }
+      if (!email || !EMAIL_REGEX.test(email)) {
+        setValidationError('Please enter a valid email address.')
+        return
+      }
+      setValidationError(null)
+      setCustomerSubmitting(true)
+      const widgetCustomerId = await upsertWidgetCustomer()
+      setCustomerSubmitting(false)
       setState((prev) => ({
         ...prev,
+        widgetCustomerId: widgetCustomerId || prev.widgetCustomerId,
         currentStep: 5,
         completedSteps: new Set([...Array.from(prev.completedSteps), 4]),
       }))
       return
     }
-  }, [state, fetchSlots])
+
+    if (currentStep === 5) {
+      setState((prev) => ({
+        ...prev,
+        currentStep: 6,
+        completedSteps: new Set([...Array.from(prev.completedSteps), 5]),
+      }))
+      return
+    }
+  }, [state, fetchSlots, upsertWidgetCustomer])
 
   const handleConfirm = useCallback(async () => {
-    const { selectedService, selectedStaff, selectedDate, selectedSlot, customerInfo } = state
+    const {
+      selectedService,
+      selectedStaff,
+      selectedDate,
+      selectedSlot,
+      customerInfo,
+      chatSessionId,
+      visitorId,
+      widgetCustomerId,
+    } = state
     if (!selectedService || !selectedStaff || !selectedDate || !selectedSlot) return
 
     const name = customerInfo.name.trim()
@@ -263,6 +316,9 @@ export default function BookingWizardPage() {
           customer_name: name,
           customer_email: email || undefined,
           customer_phone: phone || undefined,
+          ...(chatSessionId ? { chat_session_id: chatSessionId } : {}),
+          ...(visitorId ? { visitor_id: visitorId } : {}),
+          ...(widgetCustomerId ? { widget_customer_id: widgetCustomerId } : {}),
         }),
       })
       if (res.status === 201) {
@@ -293,6 +349,7 @@ export default function BookingWizardPage() {
       const nextCompleted = new Set(prev.completedSteps)
       nextCompleted.delete(3)
       nextCompleted.delete(4)
+      nextCompleted.delete(5)
       return {
         ...prev,
         selectedDate: firstAvailable?.date ?? null,
@@ -312,11 +369,13 @@ export default function BookingWizardPage() {
       case 3:
         return !state.selectedSlot
       case 4:
+        return customerSubmitting
+      case 5:
         return !state.paymentMethod
       default:
         return false
     }
-  }, [state, staff])
+  }, [state, staff, customerSubmitting])
 
   if (confirmedAppointment && state.selectedService && state.selectedStaff && state.selectedDate && state.selectedSlot) {
     return (
@@ -382,13 +441,21 @@ export default function BookingWizardPage() {
         )}
 
         {state.currentStep === 4 && (
+          <StepCustomerDetails
+            value={state.customerInfo}
+            onChange={(info) => setState((prev) => ({ ...prev, customerInfo: info }))}
+            validationError={validationError}
+          />
+        )}
+
+        {state.currentStep === 5 && (
           <StepPayment
             value={state.paymentMethod}
             onChange={(method) => setState((prev) => ({ ...prev, paymentMethod: method }))}
           />
         )}
 
-        {state.currentStep === 5 &&
+        {state.currentStep === 6 &&
           state.selectedService &&
           state.selectedStaff &&
           state.selectedDate &&
@@ -416,11 +483,12 @@ export default function BookingWizardPage() {
         )}
       </div>
 
-      {state.currentStep < 5 ? (
+      {state.currentStep < 6 ? (
         <WizardFooter
           onPrevious={handlePrevious}
           onNext={handleNext}
           nextDisabled={nextDisabled}
+          nextLoading={customerSubmitting && state.currentStep === 4}
           hidePrevious={state.currentStep === 1}
         />
       ) : (

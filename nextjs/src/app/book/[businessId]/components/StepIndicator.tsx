@@ -1,6 +1,6 @@
-const TOTAL_STEPS = 5
+const TOTAL_STEPS = 6
 
-const STEP_LABELS = ['Service', 'Staff', 'Time', 'Payment', 'Confirm'] as const
+const STEP_LABELS = ['Service', 'Staff', 'Time', 'Your details', 'Payment', 'Confirm'] as const
 
 interface StepIndicatorProps {
   currentStep: number

@@ -139,7 +139,9 @@ export function buildSystemPrompt(
       lines.push('Do not bring up appointment booking unless the customer asks.')
     } else if (intent === 'book_appointment') {
       lines.push('The customer wants to book an appointment. Guide them toward booking.')
-      lines.push('Share the booking link early in the conversation and encourage them to book there.')
+      lines.push('When the visitor is ready to book, reply naturally with a brief encouragement and emit [BOOKING_LINK] at the end of that reply. The widget will render a booking card with a link to the booking page.')
+      lines.push('Do NOT attempt to collect booking details in chat (service choice, staff, date, time, payment, name, email, phone). The booking wizard handles all of that.')
+      lines.push('Emit [BOOKING_LINK] only once per conversation. Once the card has been shown, do not emit it again — if the visitor asks more booking questions, answer briefly and remind them to use the booking link already shown.')
     } else if (intent === 'appointment_details') {
       lines.push('The customer wants to check an existing appointment. They provided their appointment number.')
       lines.push('Look up and share the appointment details using the visible fields listed below.')

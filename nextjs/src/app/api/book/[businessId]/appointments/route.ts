@@ -56,6 +56,9 @@ export async function POST(
     customer_name,
     customer_email,
     customer_phone,
+    chat_session_id,
+    visitor_id,
+    widget_customer_id,
   } = body as Record<string, string | undefined>
 
   if (!isValidUUID(service_id)) {
@@ -118,6 +121,27 @@ export async function POST(
   if (!email && !phone) {
     return NextResponse.json(
       { error: 'At least one of customer_email or customer_phone is required' },
+      { status: 400, headers: CORS_HEADERS }
+    )
+  }
+
+  if (chat_session_id !== undefined && !isValidUUID(chat_session_id)) {
+    return NextResponse.json(
+      { error: 'chat_session_id must be a valid UUID' },
+      { status: 400, headers: CORS_HEADERS }
+    )
+  }
+  if (widget_customer_id !== undefined && !isValidUUID(widget_customer_id)) {
+    return NextResponse.json(
+      { error: 'widget_customer_id must be a valid UUID' },
+      { status: 400, headers: CORS_HEADERS }
+    )
+  }
+  const visitorIdTrimmed =
+    typeof visitor_id === 'string' ? visitor_id.trim() : ''
+  if (visitorIdTrimmed.length > 128) {
+    return NextResponse.json(
+      { error: 'visitor_id is too long' },
       { status: 400, headers: CORS_HEADERS }
     )
   }
@@ -207,6 +231,9 @@ export async function POST(
   }
   if (email) insertData.customer_email = email
   if (phone) insertData.customer_phone = phone
+  if (chat_session_id) insertData.chat_session_id = chat_session_id
+  if (visitorIdTrimmed) insertData.visitor_id = visitorIdTrimmed
+  if (widget_customer_id) insertData.widget_customer_id = widget_customer_id
 
   const { data: appointment, error } = await supabase
     .from('appointments')

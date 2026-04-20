@@ -25,6 +25,11 @@
   var feedbackVisible = false; // true while the rating prompt is on-screen — drives closed_widget/closed_tab tracking
   var resumeFromSessionId = null; // set once on Continue click; attached to the first chat POST of the new session
   var businessName = ''; // populated from /config; rendered in Recent Chats rows
+  // Booking poll (wimp-06): active while a Booking Card is on-screen and booking is pending.
+  // Polls /session/<sid>/booking-status every 5s. Cleared on success, session end, or widget close.
+  var bookingPollTimer = null;
+  var bookingCardRendered = false; // guard against duplicate Booking Cards on repeat [BOOKING_LINK] emits
+  var bookingConfirmed = false;    // true once booking-status returns booked:true; suppresses further poll work
 
   // --- Appearance config (populated from API, defaults here) ---
   var cfg = {
@@ -213,7 +218,34 @@
     '#ai-widget-history-footer { padding: 10px 12px; border-top: 1px solid #f0f0f0; flex-shrink: 0; }',
     '.ai-widget-continue-btn { width: 100%; padding: 9px 14px; border: none; border-radius: 8px; background: var(--ai-widget-primary, #2563eb); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; transition: opacity 0.15s; }',
     '.ai-widget-continue-btn:hover { opacity: 0.9; }',
-    '.ai-widget-continue-btn:disabled { opacity: 0.5; cursor: not-allowed; }'
+    '.ai-widget-continue-btn:disabled { opacity: 0.5; cursor: not-allowed; }',
+    // Inline booking card (rendered when AI emits [BOOKING_LINK])
+    '.ai-widget-booking-card { margin: 4px 0 4px 32px; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px 14px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }',
+    '.ai-widget-booking-title { font-size: 13px; font-weight: 700; color: #111827; margin-bottom: 4px; }',
+    '.ai-widget-booking-subtitle { font-size: 11px; color: #6b7280; margin-bottom: 10px; }',
+    '.ai-widget-booking-cta { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; background: var(--ai-widget-primary, #2563eb); color: #fff; border-radius: 8px; font-size: 12px; font-weight: 600; text-decoration: none; transition: opacity 0.15s; }',
+    '.ai-widget-booking-cta:hover { opacity: 0.9; }',
+    '.ai-widget-booking-cta-arrow { font-size: 14px; line-height: 1; }',
+    // Inline booking confirmation card (rendered when polling returns booked:true). Does NOT end the session.
+    '.ai-widget-confirm-card { margin: 4px 0 4px 32px; background: #fff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 14px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }',
+    '.ai-widget-confirm-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }',
+    '.ai-widget-confirm-check { width: 22px; height: 22px; border-radius: 50%; background: #10b981; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }',
+    '.ai-widget-confirm-title { font-size: 13px; font-weight: 700; color: #111827; }',
+    '.ai-widget-confirm-details { font-size: 12px; color: #374151; line-height: 1.5; margin-bottom: 10px; }',
+    '.ai-widget-confirm-detail-row { display: flex; gap: 6px; }',
+    '.ai-widget-confirm-detail-label { color: #6b7280; min-width: 56px; flex-shrink: 0; }',
+    '.ai-widget-confirm-divider { height: 1px; background: #f0f0f0; margin: 10px 0; }',
+    '.ai-widget-confirm-prompt { font-size: 12px; color: #4b5563; margin-bottom: 8px; }',
+    '.ai-widget-confirm-stars { display: flex; gap: 6px; margin-bottom: 8px; }',
+    '.ai-widget-confirm-star { background: none; border: none; font-size: 20px; cursor: pointer; color: #d1d5db; transition: color 0.15s; padding: 0; line-height: 1; font-family: inherit; }',
+    '.ai-widget-confirm-note { width: 100%; border: 1px solid #e5e7eb; border-radius: 8px; padding: 6px 10px; font-size: 12px; font-family: inherit; outline: none; resize: none; height: 56px; background: #f9fafb; box-sizing: border-box; margin-bottom: 8px; }',
+    '.ai-widget-confirm-buttons { display: flex; gap: 8px; }',
+    '.ai-widget-confirm-submit { flex: 1; padding: 7px 12px; border: none; border-radius: 8px; background: var(--ai-widget-primary, #2563eb); color: #fff; font-size: 12px; font-weight: 600; font-family: inherit; cursor: pointer; transition: opacity 0.15s; }',
+    '.ai-widget-confirm-submit:hover { opacity: 0.9; }',
+    '.ai-widget-confirm-submit:disabled { opacity: 0.5; cursor: not-allowed; }',
+    '.ai-widget-confirm-skip { padding: 7px 12px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; color: #4b5563; font-size: 12px; font-weight: 600; font-family: inherit; cursor: pointer; transition: background 0.15s; }',
+    '.ai-widget-confirm-skip:hover { background: #f9fafb; }',
+    '.ai-widget-confirm-thanks { font-size: 12px; color: #10b981; font-weight: 600; text-align: center; padding: 4px 0; }'
   ].join('\n');
   document.head.appendChild(style);
 
@@ -473,7 +505,11 @@
       var bubble = document.createElement('div');
       bubble.className = role === 'user' ? 'ai-widget-msg-user' : 'ai-widget-msg-bot';
       // Strip end/request markers from historical AI messages so read-only view is clean.
-      var text = (m.content || '').replace(/\s*\[END_CONVERSATION\]\s*/g, '').replace(/\s*\[REQUEST_CONTACT\]\s*/g, '').trim();
+      var text = (m.content || '')
+        .replace(/\s*\[END_CONVERSATION\]\s*/g, '')
+        .replace(/\s*\[REQUEST_CONTACT\]\s*/g, '')
+        .replace(/\s*\[BOOKING_LINK\]\s*/g, '')
+        .trim();
       bubble.textContent = text;
       if (role === 'bot' && cfg.avatar_enabled) {
         var avatarEl = document.createElement('div');
@@ -502,6 +538,9 @@
     sessionEndReason = null;
     welcomeShown = false;
     contactCardDismissed = false;
+    bookingCardRendered = false;
+    bookingConfirmed = false;
+    stopBookingPoll();
     localStorage.removeItem('ai-widget-session-' + businessId);
     localStorage.removeItem(lastMsgTimeKey);
     messagesEl.innerHTML = '';
@@ -638,6 +677,227 @@
         submitBtn.textContent = 'Submit';
         emailErr.textContent = 'Something went wrong. Please try again.';
       });
+  }
+
+  // --- Booking Card + polling (wimp-06) ---
+  // Renders an inline booking card when the AI emits [BOOKING_LINK]. The link opens the real
+  // booking wizard in a new tab, preserving the chat session + visitor ID so the appointment
+  // row lands with `chat_session_id` populated. Polling starts the moment the card is shown.
+  function showBookingCard() {
+    if (isPreview) return;
+    if (!sessionId) return;
+    if (bookingCardRendered || bookingConfirmed) return;
+
+    var origin;
+    try {
+      origin = new URL(API_BASE).origin;
+    } catch (e) {
+      origin = API_BASE;
+    }
+    var href = origin + '/book/' + encodeURIComponent(businessId)
+      + '?session=' + encodeURIComponent(sessionId)
+      + '&visitor=' + encodeURIComponent(visitorId);
+
+    var card = document.createElement('div');
+    card.id = 'ai-widget-booking-card';
+    card.className = 'ai-widget-booking-card';
+    card.innerHTML = [
+      '<div class="ai-widget-booking-title">Ready to book?</div>',
+      '<div class="ai-widget-booking-subtitle">Click below to choose a time.</div>',
+      '<a class="ai-widget-booking-cta" id="ai-widget-booking-link" target="_blank" rel="noopener noreferrer" href="' + href + '">',
+        'Book an Appointment <span class="ai-widget-booking-cta-arrow">\u2192</span>',
+      '</a>',
+    ].join('');
+
+    messagesEl.appendChild(card);
+    scrollToBottom();
+    bookingCardRendered = true;
+    startBookingPoll();
+  }
+
+  function startBookingPoll() {
+    if (isPreview) return;
+    if (!sessionId) return;
+    if (bookingPollTimer) return;
+
+    function tick() {
+      // If session ended, widget closed, or we already rendered a confirmation, stop.
+      if (bookingConfirmed || sessionEnded || popup.style.display === 'none') {
+        stopBookingPoll();
+        return;
+      }
+      fetch(API_BASE + '/api/widget/' + businessId + '/session/' + sessionId + '/booking-status')
+        .then(function(r) { return r.ok ? r.json() : Promise.reject(r.status); })
+        .then(function(data) {
+          if (data && data.booked && data.appointment) {
+            bookingConfirmed = true;
+            stopBookingPoll();
+            showBookingConfirmationCard(data.appointment);
+          }
+        })
+        .catch(function() { /* transient — next tick will retry */ });
+    }
+
+    // Kick off immediately so the visitor does not wait 5s on tab-return with a fast booking.
+    tick();
+    bookingPollTimer = setInterval(tick, 5000);
+  }
+
+  function stopBookingPoll() {
+    if (bookingPollTimer) {
+      clearInterval(bookingPollTimer);
+      bookingPollTimer = null;
+    }
+  }
+
+  function formatBookingDate(iso) {
+    if (!iso) return '';
+    // iso is 'YYYY-MM-DD' — build a local Date without TZ shift.
+    var parts = iso.split('-');
+    if (parts.length !== 3) return iso;
+    var d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  }
+
+  function formatBookingTime(hhmm) {
+    if (!hhmm || typeof hhmm !== 'string') return hhmm || '';
+    var segs = hhmm.split(':');
+    if (segs.length < 2) return hhmm;
+    var h = parseInt(segs[0], 10);
+    var m = parseInt(segs[1], 10);
+    if (isNaN(h) || isNaN(m)) return hhmm;
+    var period = h >= 12 ? 'PM' : 'AM';
+    var hh = h % 12; if (hh === 0) hh = 12;
+    var mm = m < 10 ? '0' + m : String(m);
+    return hh + ':' + mm + ' ' + period;
+  }
+
+  // Renders the Booking Confirmation Card inline with an optional star rating + note.
+  // Submit/Skip close the rating block but leave the session active — the visitor can
+  // ask follow-up questions below. We POST to /session/<sid>/rating (lightweight) so the
+  // session's status/ended_at are NOT touched.
+  function showBookingConfirmationCard(appt) {
+    // Remove the booking CTA card — it's been replaced by the confirmation.
+    var cta = document.getElementById('ai-widget-booking-card');
+    if (cta) cta.remove();
+
+    var card = document.createElement('div');
+    card.id = 'ai-widget-confirm-card';
+    card.className = 'ai-widget-confirm-card';
+
+    var serviceName = appt && appt.service_name ? appt.service_name : 'Your service';
+    var staffName = appt && appt.staff_name ? appt.staff_name : null;
+    var dateStr = appt && appt.appointment_date ? formatBookingDate(appt.appointment_date) : '';
+    var timeStr = '';
+    if (appt && appt.slot_start) {
+      timeStr = formatBookingTime(appt.slot_start);
+      if (appt.slot_end) timeStr += ' \u2013 ' + formatBookingTime(appt.slot_end);
+    }
+
+    var detailsHtml = '';
+    detailsHtml += '<div class="ai-widget-confirm-detail-row"><span class="ai-widget-confirm-detail-label">Service</span><span>' + escapeHtml(serviceName) + '</span></div>';
+    if (staffName) {
+      detailsHtml += '<div class="ai-widget-confirm-detail-row"><span class="ai-widget-confirm-detail-label">With</span><span>' + escapeHtml(staffName) + '</span></div>';
+    }
+    if (dateStr) {
+      detailsHtml += '<div class="ai-widget-confirm-detail-row"><span class="ai-widget-confirm-detail-label">When</span><span>' + escapeHtml(dateStr) + (timeStr ? ' \u00B7 ' + escapeHtml(timeStr) : '') + '</span></div>';
+    }
+
+    card.innerHTML = [
+      '<div class="ai-widget-confirm-header">',
+        '<span class="ai-widget-confirm-check">\u2713</span>',
+        '<span class="ai-widget-confirm-title">Your appointment is booked.</span>',
+      '</div>',
+      '<div class="ai-widget-confirm-details">' + detailsHtml + '</div>',
+      '<div class="ai-widget-confirm-divider"></div>',
+      '<div class="ai-widget-confirm-prompt">Would you like to leave a quick review?</div>',
+      '<div class="ai-widget-confirm-stars" id="ai-widget-confirm-stars"></div>',
+      '<textarea class="ai-widget-confirm-note" id="ai-widget-confirm-note" placeholder="Leave a note (optional)"></textarea>',
+      '<div class="ai-widget-confirm-buttons">',
+        '<button class="ai-widget-confirm-submit" id="ai-widget-confirm-submit">Submit</button>',
+        '<button class="ai-widget-confirm-skip" id="ai-widget-confirm-skip">Skip</button>',
+      '</div>',
+    ].join('');
+
+    messagesEl.appendChild(card);
+
+    // Star selector — same interaction model as the end-of-conversation feedback prompt.
+    var starsContainer = document.getElementById('ai-widget-confirm-stars');
+    var selectedRating = 0;
+    for (var i = 1; i <= 5; i++) {
+      (function(star) {
+        var starBtn = document.createElement('button');
+        starBtn.className = 'ai-widget-confirm-star';
+        starBtn.textContent = '\u2605';
+        starBtn.setAttribute('data-star', star);
+        starBtn.addEventListener('mouseover', function() {
+          var all = starsContainer.querySelectorAll('button');
+          all.forEach(function(s) {
+            s.style.color = parseInt(s.getAttribute('data-star'), 10) <= star ? primaryColor : '#d1d5db';
+          });
+        });
+        starBtn.addEventListener('mouseout', function() {
+          var all = starsContainer.querySelectorAll('button');
+          all.forEach(function(s) {
+            s.style.color = parseInt(s.getAttribute('data-star'), 10) <= selectedRating ? primaryColor : '#d1d5db';
+          });
+        });
+        starBtn.addEventListener('click', function() {
+          selectedRating = star;
+          var all = starsContainer.querySelectorAll('button');
+          all.forEach(function(s) {
+            s.style.color = parseInt(s.getAttribute('data-star'), 10) <= selectedRating ? primaryColor : '#d1d5db';
+          });
+        });
+        starsContainer.appendChild(starBtn);
+      })(i);
+    }
+
+    var submitBtn = document.getElementById('ai-widget-confirm-submit');
+    var skipBtn = document.getElementById('ai-widget-confirm-skip');
+    var noteEl = document.getElementById('ai-widget-confirm-note');
+
+    submitBtn.addEventListener('click', function() {
+      if (selectedRating <= 0) {
+        // Treat "Submit" without a rating as a no-op so the visitor isn't forced to rate blindly.
+        return;
+      }
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Submitting...';
+      var note = (noteEl.value || '').trim();
+      postBookingRating(selectedRating, note || null)
+        .then(function() { collapseConfirmCardToThanks(card); })
+        .catch(function() { collapseConfirmCardToThanks(card); });
+    });
+
+    skipBtn.addEventListener('click', function() {
+      card.remove();
+    });
+
+    scrollToBottom();
+  }
+
+  function collapseConfirmCardToThanks(card) {
+    card.innerHTML = '<div class="ai-widget-confirm-thanks">Thanks for your feedback!</div>';
+    setTimeout(function() {
+      if (card && card.parentNode) card.remove();
+    }, 2500);
+    scrollToBottom();
+  }
+
+  // Mid-session rating — writes feedback_rating/note without terminating the session.
+  // The dedicated endpoint leaves chat_sessions.status untouched so the conversation can continue.
+  function postBookingRating(rating, note) {
+    if (isPreview || !sessionId) return Promise.resolve();
+    return fetch(API_BASE + '/api/widget/' + businessId + '/session/' + sessionId + '/rating', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        feedback_rating: rating,
+        feedback_note: note || null,
+      })
+    });
   }
 
   // --- Open Chat ---
@@ -850,7 +1110,8 @@
                 } else if (data.type === 'token') {
                   var cleanToken = data.token
                     .replace(/\s*\[END_CONVERSATION\]\s*/g, '')
-                    .replace(/\s*\[REQUEST_CONTACT\]\s*/g, '');
+                    .replace(/\s*\[REQUEST_CONTACT\]\s*/g, '')
+                    .replace(/\s*\[BOOKING_LINK\]\s*/g, '');
                   if (cleanToken) {
                     botBubble.textContent += cleanToken;
                     scrollToBottom();
@@ -862,6 +1123,12 @@
                   }
                   setInputDisabled(true);
                   showInlineContactCard();
+                } else if (data.type === 'booking_link') {
+                  // Scrub any stray marker that slipped into the bubble, then render the Booking Card.
+                  if (botBubble) {
+                    botBubble.textContent = botBubble.textContent.replace(/\s*\[BOOKING_LINK\]\s*/g, '').trim();
+                  }
+                  showBookingCard();
                 } else if (data.type === 'end_conversation') {
                   // AI has detected end of conversation — strip any [END_CONVERSATION] marker
                   if (botBubble) {
@@ -949,6 +1216,7 @@
     sessionEnded = true;
     sessionEndReason = 'expired';
     stopInactivityTimer();
+    stopBookingPoll();
     setInputDisabled(true);
     document.getElementById('ai-widget-input-row').style.display = 'none';
 
@@ -968,6 +1236,7 @@
     sessionEnded = true;
     sessionEndReason = reason;
     stopInactivityTimer();
+    stopBookingPoll();
     setInputDisabled(true);
     document.getElementById('ai-widget-input-row').style.display = 'none';
 
@@ -1200,6 +1469,9 @@
     sessionEndReason = null;
     welcomeShown = false;
     contactCardDismissed = false;
+    bookingCardRendered = false;
+    bookingConfirmed = false;
+    stopBookingPoll();
     localStorage.removeItem('ai-widget-session-' + businessId);
     localStorage.removeItem(lastMsgTimeKey);
 
@@ -1258,6 +1530,7 @@
       hideMenu();
       updateMenuButtonVisibility();
       stopInactivityTimer();
+      stopBookingPoll();
     }
   });
 
@@ -1270,6 +1543,7 @@
     popup.style.display = 'none';
     updateMenuButtonVisibility();
     stopInactivityTimer();
+    stopBookingPoll();
   });
 
   sendBtn.addEventListener('click', function() {

@@ -422,6 +422,12 @@ export async function POST(
         fullReply = fullReply.replace(/\s*\[REQUEST_CONTACT\]\s*/g, '')
       }
 
+      // Booking-link signal detection: check for [BOOKING_LINK] marker
+      const hasBookingLinkSignal = fullReply.includes('[BOOKING_LINK]')
+      if (hasBookingLinkSignal) {
+        fullReply = fullReply.replace(/\s*\[BOOKING_LINK\]\s*/g, '')
+      }
+
       // End signal detection: check for [END_CONVERSATION] marker
       const hasEndSignal = fullReply.includes('[END_CONVERSATION]')
       if (hasEndSignal) {
@@ -432,6 +438,13 @@ export async function POST(
       if (hasRequestContactSignal) {
         controller.enqueue(
           encoder.encode(`data: ${JSON.stringify({ type: 'request_contact' })}\n\n`)
+        )
+      }
+
+      // Send booking_link event before done if booking intent was signalled
+      if (hasBookingLinkSignal) {
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify({ type: 'booking_link' })}\n\n`)
         )
       }
 

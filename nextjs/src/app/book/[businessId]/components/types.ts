@@ -53,3 +53,19 @@ export interface Appointment {
   status: string
   created_at: string
 }
+
+export type Step = 1 | 2 | 3 | 4 | 5 | 6
+
+export interface WizardState {
+  currentStep: Step
+  completedSteps: Set<number>
+  selectedService: Service | null
+  selectedStaff: StaffMember | null
+  selectedDate: string | null
+  selectedSlot: Slot | null
+  paymentMethod: PaymentMethod
+  customerInfo: CustomerInfo
+  chatSessionId?: string
+  visitorId?: string
+  widgetCustomerId?: string
+}
