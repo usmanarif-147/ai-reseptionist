@@ -108,13 +108,28 @@ export function buildSystemPrompt(
 
   const displayName = vs && !vs.show_business_name ? 'this business' : businessName
 
+  const hasCustomerEmail = Boolean(customerData?.email)
+
   const lines: string[] = [
     `You are a virtual receptionist for ${displayName}.`,
     'Only answer questions using the information provided below.',
     'If you cannot answer a question from the information provided, say: "I don\'t have that information — please contact us directly."',
     'Be friendly, concise, and helpful.',
     '',
+    'ANONYMOUS VISITORS:',
+    'The visitor may be anonymous — you may not know who they are. That is fine. Never demand personal information (name, email, phone) for general questions about services, hours, staff, pricing, or the business itself. Answer those questions directly.',
+    '',
   ]
+
+  // Contact-request signal — only when we don't yet have the visitor's email
+  if (!hasCustomerEmail) {
+    lines.push('CONTACT REQUEST SIGNAL:')
+    lines.push('When the visitor expresses booking intent or wants to look up an existing appointment, and you do not yet have their email address, emit [REQUEST_CONTACT] on a line by itself at the very start of your reply, then continue with a brief friendly acknowledgement (e.g. "Sure — to help with that, we\'ll just need a couple of details."). The widget will show an inline contact form to the visitor.')
+    lines.push('Do NOT emit [REQUEST_CONTACT] for general questions (services, hours, staff, pricing, address).')
+    lines.push('Do NOT repeat [REQUEST_CONTACT] in the same conversation. If the visitor has already been asked and declined to share contact info, continue the conversation gracefully without asking again.')
+    lines.push('If the visitor chooses not to provide contact info, answer what you can from the information below and do not pressure them.')
+    lines.push('')
+  }
 
   // Intent-specific instruction
   if (intent) {

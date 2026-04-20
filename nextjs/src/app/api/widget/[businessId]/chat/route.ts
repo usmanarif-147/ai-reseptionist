@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { createGeminiClient } from '@/lib/gemini'
 import { buildSystemPrompt, DEFAULT_VISIBILITY_SETTINGS, VisibilitySettings, CustomerData } from '@/lib/build-system-prompt'
+import { inferIntent } from '@/lib/infer-intent'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -69,7 +70,7 @@ export async function POST(
     // Verify session belongs to this business
     const { data: session } = await supabase
       .from('chat_sessions')
-      .select('id, customer_id, off_topic_count, status')
+      .select('id, customer_id, off_topic_count, status, intent')
       .eq('id', sessionId)
       .eq('business_id', businessId)
       .single()
@@ -97,10 +98,28 @@ export async function POST(
         .from('chat_sessions')
         .update({
           customer_id: body.customer_id,
-          intent: body.intent || null,
+          intent: body.intent || session.intent || null,
         })
         .eq('id', sessionId)
         .eq('business_id', businessId)
+    }
+
+    // First-turn intent inference: if the session has no messages yet and no intent, classify now
+    if (!session.intent) {
+      const { count } = await supabase
+        .from('chat_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('session_id', sessionId)
+
+      if ((count ?? 0) === 0) {
+        const inferredIntent = inferIntent(trimmedMessage)
+        await supabase
+          .from('chat_sessions')
+          .update({ intent: inferredIntent })
+          .eq('id', sessionId)
+          .eq('business_id', businessId)
+        body.intent = body.intent || inferredIntent
+      }
     }
   } else {
     // Verify business exists before creating a session
@@ -121,9 +140,10 @@ export async function POST(
     if (body.customer_id && UUID_REGEX.test(body.customer_id)) {
       sessionInsert.customer_id = body.customer_id
     }
-    if (body.intent) {
-      sessionInsert.intent = body.intent
-    }
+    // First-turn intent inference — classify from the opening message
+    const inferredIntent = body.intent || inferIntent(trimmedMessage)
+    sessionInsert.intent = inferredIntent
+    body.intent = inferredIntent
 
     const { data: newSession, error: sessionError } = await supabase
       .from('chat_sessions')
@@ -349,10 +369,23 @@ export async function POST(
           .eq('id', sessionId)
       }
 
+      // Request-contact signal detection: check for [REQUEST_CONTACT] marker
+      const hasRequestContactSignal = fullReply.includes('[REQUEST_CONTACT]')
+      if (hasRequestContactSignal) {
+        fullReply = fullReply.replace(/\s*\[REQUEST_CONTACT\]\s*/g, '')
+      }
+
       // End signal detection: check for [END_CONVERSATION] marker
       const hasEndSignal = fullReply.includes('[END_CONVERSATION]')
       if (hasEndSignal) {
         fullReply = fullReply.replace(/\s*\[END_CONVERSATION\]\s*/g, '')
+      }
+
+      // Send request_contact event before done if contact info is needed
+      if (hasRequestContactSignal) {
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify({ type: 'request_contact' })}\n\n`)
+        )
       }
 
       // Send end_conversation event before done if conversation is ending
