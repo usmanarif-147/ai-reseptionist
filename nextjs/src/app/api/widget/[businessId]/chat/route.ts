@@ -33,7 +33,7 @@ export async function POST(
     )
   }
 
-  let body: { session_id?: string; message?: string; customer_id?: string; intent?: string }
+  let body: { session_id?: string; message?: string; customer_id?: string; intent?: string; visitor_id?: string }
   try {
     body = await request.json()
   } catch {
@@ -139,6 +139,10 @@ export async function POST(
     const sessionInsert: Record<string, unknown> = { business_id: businessId }
     if (body.customer_id && UUID_REGEX.test(body.customer_id)) {
       sessionInsert.customer_id = body.customer_id
+    }
+    const incomingVisitorId = body.visitor_id?.trim()
+    if (incomingVisitorId && incomingVisitorId.length > 0 && incomingVisitorId.length <= 128) {
+      sessionInsert.visitor_id = incomingVisitorId
     }
     // First-turn intent inference — classify from the opening message
     const inferredIntent = body.intent || inferIntent(trimmedMessage)

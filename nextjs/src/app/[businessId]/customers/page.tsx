@@ -20,27 +20,24 @@ interface Customer {
 
 const TYPE_FILTERS: { label: string; value: string }[] = [
   { label: 'All', value: 'all' },
-  { label: 'New Visitor', value: 'new_visitor' },
-  { label: 'Returning Visitor', value: 'returning_visitor' },
-  { label: 'Interested Prospect', value: 'interested_prospect' },
-  { label: 'Booked Customer', value: 'booked_customer' },
-  { label: 'Regular Customer', value: 'regular_customer' },
+  { label: 'Customer', value: 'customer' },
+  { label: 'Lead', value: 'lead' },
+  { label: 'Frequent Visitor', value: 'frequent_visitor' },
+  { label: 'One-Time Visitor', value: 'one_time_visitor' },
 ]
 
 const TYPE_BADGE: Record<string, string> = {
-  regular_customer: 'bg-green-100 text-green-800',
-  booked_customer: 'bg-blue-100 text-blue-800',
-  interested_prospect: 'bg-amber-100 text-amber-800',
-  returning_visitor: 'bg-purple-100 text-purple-800',
-  new_visitor: 'bg-gray-100 text-gray-800',
+  customer: 'bg-green-100 text-green-800',
+  lead: 'bg-blue-100 text-blue-800',
+  frequent_visitor: 'bg-purple-100 text-purple-800',
+  one_time_visitor: 'bg-gray-100 text-gray-800',
 }
 
 const TYPE_LABEL: Record<string, string> = {
-  new_visitor: 'New Visitor',
-  returning_visitor: 'Returning Visitor',
-  interested_prospect: 'Interested Prospect',
-  booked_customer: 'Booked Customer',
-  regular_customer: 'Regular Customer',
+  customer: 'Customer',
+  lead: 'Lead',
+  frequent_visitor: 'Frequent Visitor',
+  one_time_visitor: 'One-Time Visitor',
 }
 
 function formatDate(dateStr: string): string {

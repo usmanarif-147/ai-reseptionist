@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticateAndGetBusiness } from '@/lib/auth'
-import { deriveCustomerType } from '@/lib/widget-customer-type'
+import { classifyVisitor, VisitorTier } from '@/lib/widget-customer-type'
 
 function getDateRange(range: string, fromParam?: string, toParam?: string): { from: string; to: string } {
   if (range === 'custom' && fromParam && toParam) {
@@ -56,28 +56,37 @@ export async function GET(request: NextRequest) {
 
   try {
     const [
+      widgetOpens,
       visitorOverview,
       conversationStats,
       intentBreakdown,
       customerSatisfaction,
       feedbackNotes,
       leadCapture,
+      funnel,
+      visitorBreakdown,
     ] = await Promise.all([
+      getWidgetOpens(supabase, businessId, from, to),
       getVisitorOverview(supabase, businessId, from, to),
       getConversationStats(supabase, businessId, from, to),
       getIntentBreakdown(supabase, businessId, from, to),
       getCustomerSatisfaction(supabase, businessId, from, to),
       getFeedbackNotes(supabase, businessId, from, to),
       getLeadCapture(supabase, businessId, from, to),
+      getWidgetFunnel(supabase, businessId, from, to),
+      getVisitorBreakdown(supabase, businessId, from, to),
     ])
 
     return NextResponse.json({
+      widgetOpens,
       visitorOverview,
       conversationStats,
       intentBreakdown,
       customerSatisfaction,
       feedbackNotes,
       leadCapture,
+      funnel,
+      visitorBreakdown,
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error'
@@ -88,13 +97,40 @@ export async function GET(request: NextRequest) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SupabaseClient = any
 
+async function getWidgetOpens(
+  supabase: SupabaseClient,
+  businessId: string,
+  from: string,
+  to: string,
+) {
+  const { data, error } = await supabase
+    .from('widget_opens')
+    .select('visitor_id')
+    .eq('business_id', businessId)
+    .gte('opened_at', from)
+    .lte('opened_at', to)
+
+  if (error) throw new Error(`Widget opens: ${error.message}`)
+
+  const rows = data ?? []
+  const total = rows.length
+  const distinctVisitors = new Set(
+    rows.map((r: { visitor_id: string }) => r.visitor_id).filter(Boolean)
+  ).size
+
+  return {
+    total,
+    distinct_visitors: distinctVisitors,
+  }
+}
+
 async function getVisitorOverview(
   supabase: SupabaseClient,
   businessId: string,
   from: string,
   to: string,
 ) {
-  // Total widget opens = all sessions in date range
+  // Conversations = all chat sessions in date range
   const { data: sessions, error: sessionsErr } = await supabase
     .from('chat_sessions')
     .select('id, customer_id')
@@ -104,8 +140,8 @@ async function getVisitorOverview(
 
   if (sessionsErr) throw new Error(`Visitor overview sessions: ${sessionsErr.message}`)
 
-  const totalWidgetOpens = sessions?.length ?? 0
-  const anonymousVisitors = sessions?.filter((s: { customer_id: string | null }) => !s.customer_id).length ?? 0
+  const totalConversations = sessions?.length ?? 0
+  const anonymousChatters = sessions?.filter((s: { customer_id: string | null }) => !s.customer_id).length ?? 0
 
   // Unique visitors = distinct customers with first_seen_at in range
   const { data: newCustomers, error: newErr } = await supabase
@@ -134,11 +170,15 @@ async function getVisitorOverview(
   const uniqueVisitors = newVisitors + returningVisitors
 
   return {
-    total_widget_opens: totalWidgetOpens,
+    total_conversations: totalConversations,
+    // Back-compat alias retained so existing dashboard keeps rendering during rollout.
+    total_widget_opens: totalConversations,
     unique_visitors: uniqueVisitors,
     new_visitors: newVisitors,
     returning_visitors: returningVisitors,
-    anonymous_visitors: anonymousVisitors,
+    anonymous_chatters: anonymousChatters,
+    // Back-compat alias.
+    anonymous_visitors: anonymousChatters,
   }
 }
 
@@ -295,7 +335,7 @@ async function getFeedbackNotes(
     .map((s: { customer_id: string | null }) => s.customer_id)
     .filter(Boolean) as string[]
 
-  let customerMap = new Map<string, { name: string | null; email: string }>()
+  const customerMap = new Map<string, { name: string | null; email: string }>()
   if (customerIds.length > 0) {
     const { data: customers, error: custErr } = await supabase
       .from('widget_customers')
@@ -334,10 +374,9 @@ async function getLeadCapture(
   from: string,
   to: string,
 ) {
-  // Get customers captured in date range
   const { data: customers, error: custErr } = await supabase
     .from('widget_customers')
-    .select('id, name, total_sessions')
+    .select('id, name, email, total_sessions')
     .eq('business_id', businessId)
     .gte('first_seen_at', from)
     .lte('first_seen_at', to)
@@ -347,34 +386,25 @@ async function getLeadCapture(
   const allCustomers = customers ?? []
   const totalLeads = allCustomers.length
 
-  // Get appointment counts by customer_name
   const { data: appointments, error: apptErr } = await supabase
     .from('appointments')
-    .select('customer_name')
+    .select('customer_name, customer_email')
     .eq('business_id', businessId)
 
   if (apptErr) throw new Error(`Lead capture appointments: ${apptErr.message}`)
 
-  const appointmentCountByName = new Map<string, number>()
-  for (const appt of appointments ?? []) {
-    const name = appt.customer_name?.toLowerCase()?.trim()
-    if (name) {
-      appointmentCountByName.set(name, (appointmentCountByName.get(name) || 0) + 1)
-    }
-  }
+  const { byName: apptByName, byEmail: apptByEmail } = indexAppointments(appointments ?? [])
 
-  const byType: Record<string, number> = {
-    regular_customer: 0,
-    booked_customer: 0,
-    interested_prospect: 0,
-    returning_visitor: 0,
-    new_visitor: 0,
+  const byType: Record<VisitorTier, number> = {
+    customer: 0,
+    lead: 0,
+    frequent_visitor: 0,
+    one_time_visitor: 0,
   }
 
   for (const c of allCustomers) {
-    const customerName = c.name?.toLowerCase()?.trim()
-    const totalAppointments = customerName ? (appointmentCountByName.get(customerName) || 0) : 0
-    const type = deriveCustomerType(c.total_sessions, totalAppointments)
+    const totalAppointments = appointmentCountFor(c.name, c.email, apptByName, apptByEmail)
+    const type = classifyVisitor({ kind: 'identified', totalAppointments })
     byType[type]++
   }
 
@@ -382,4 +412,194 @@ async function getLeadCapture(
     total_leads: totalLeads,
     by_type: byType,
   }
+}
+
+async function getWidgetFunnel(
+  supabase: SupabaseClient,
+  businessId: string,
+  from: string,
+  to: string,
+) {
+  // Opens — rows in widget_opens within range
+  const { count: opensCount, error: opensErr } = await supabase
+    .from('widget_opens')
+    .select('id', { count: 'exact', head: true })
+    .eq('business_id', businessId)
+    .gte('opened_at', from)
+    .lte('opened_at', to)
+
+  if (opensErr) throw new Error(`Funnel opens: ${opensErr.message}`)
+  const opens = opensCount ?? 0
+
+  // Engaged — sessions with at least one user message.
+  const { data: sessions, error: sessErr } = await supabase
+    .from('chat_sessions')
+    .select('id')
+    .eq('business_id', businessId)
+    .gte('created_at', from)
+    .lte('created_at', to)
+
+  if (sessErr) throw new Error(`Funnel sessions: ${sessErr.message}`)
+
+  let engaged = 0
+  const sessionIds = (sessions ?? []).map((s: { id: string }) => s.id)
+  if (sessionIds.length > 0) {
+    const { data: userMsgs, error: msgErr } = await supabase
+      .from('chat_messages')
+      .select('session_id')
+      .eq('role', 'user')
+      .in('session_id', sessionIds)
+
+    if (msgErr) throw new Error(`Funnel messages: ${msgErr.message}`)
+
+    engaged = new Set((userMsgs ?? []).map((m: { session_id: string }) => m.session_id)).size
+  }
+
+  // Leads — new widget_customers rows in range
+  const { data: leadRows, error: leadsErr } = await supabase
+    .from('widget_customers')
+    .select('name, email')
+    .eq('business_id', businessId)
+    .gte('first_seen_at', from)
+    .lte('first_seen_at', to)
+
+  if (leadsErr) throw new Error(`Funnel leads: ${leadsErr.message}`)
+
+  const leadList = leadRows ?? []
+  const leads = leadList.length
+
+  // Customers — leads with at least one appointment (matched by email or name)
+  const { data: appointments, error: apptErr } = await supabase
+    .from('appointments')
+    .select('customer_name, customer_email')
+    .eq('business_id', businessId)
+
+  if (apptErr) throw new Error(`Funnel appointments: ${apptErr.message}`)
+
+  const { byName: apptByName, byEmail: apptByEmail } = indexAppointments(appointments ?? [])
+
+  let customers = 0
+  for (const lead of leadList) {
+    const count = appointmentCountFor(lead.name, lead.email, apptByName, apptByEmail)
+    if (count >= 1) customers++
+  }
+
+  const pct = (numerator: number, denominator: number) =>
+    denominator > 0 ? Math.round((numerator / denominator) * 1000) / 10 : 0
+
+  return {
+    opens,
+    engaged,
+    leads,
+    customers,
+    open_to_chat_pct: pct(engaged, opens),
+    chat_to_lead_pct: pct(leads, engaged),
+    lead_to_customer_pct: pct(customers, leads),
+  }
+}
+
+async function getVisitorBreakdown(
+  supabase: SupabaseClient,
+  businessId: string,
+  from: string,
+  to: string,
+) {
+  const breakdown: Record<VisitorTier, number> = {
+    customer: 0,
+    lead: 0,
+    frequent_visitor: 0,
+    one_time_visitor: 0,
+  }
+
+  // Identified visitors — widget_customers with first_seen_at in range.
+  const { data: customers, error: custErr } = await supabase
+    .from('widget_customers')
+    .select('id, name, email, visitor_id')
+    .eq('business_id', businessId)
+    .gte('first_seen_at', from)
+    .lte('first_seen_at', to)
+
+  if (custErr) throw new Error(`Visitor breakdown customers: ${custErr.message}`)
+
+  const identifiedCustomers = customers ?? []
+  const identifiedVisitorIds = new Set<string>(
+    identifiedCustomers
+      .map((c: { visitor_id: string | null }) => c.visitor_id)
+      .filter(Boolean) as string[]
+  )
+
+  const { data: appointments, error: apptErr } = await supabase
+    .from('appointments')
+    .select('customer_name, customer_email')
+    .eq('business_id', businessId)
+
+  if (apptErr) throw new Error(`Visitor breakdown appointments: ${apptErr.message}`)
+
+  const { byName: apptByName, byEmail: apptByEmail } = indexAppointments(appointments ?? [])
+
+  for (const c of identifiedCustomers) {
+    const totalAppointments = appointmentCountFor(c.name, c.email, apptByName, apptByEmail)
+    const tier = classifyVisitor({ kind: 'identified', totalAppointments })
+    breakdown[tier]++
+  }
+
+  // Anonymous visitors — chat_sessions in range with customer_id null, grouped by visitor_id.
+  const { data: anonSessions, error: anonErr } = await supabase
+    .from('chat_sessions')
+    .select('visitor_id')
+    .eq('business_id', businessId)
+    .is('customer_id', null)
+    .not('visitor_id', 'is', null)
+    .gte('created_at', from)
+    .lte('created_at', to)
+
+  if (anonErr) throw new Error(`Visitor breakdown anonymous: ${anonErr.message}`)
+
+  const anonCounts = new Map<string, number>()
+  for (const s of anonSessions ?? []) {
+    const vid = (s as { visitor_id: string | null }).visitor_id
+    if (!vid) continue
+    // Skip visitors who are also identified — they're already counted above.
+    if (identifiedVisitorIds.has(vid)) continue
+    anonCounts.set(vid, (anonCounts.get(vid) ?? 0) + 1)
+  }
+
+  for (const count of anonCounts.values()) {
+    const tier = classifyVisitor({ kind: 'anonymous', sessionCount: count })
+    breakdown[tier]++
+  }
+
+  return breakdown
+}
+
+type AppointmentRow = { customer_name: string | null; customer_email: string | null }
+
+function indexAppointments(rows: AppointmentRow[]) {
+  const byName = new Map<string, number>()
+  const byEmail = new Map<string, number>()
+  for (const a of rows) {
+    const name = a.customer_name?.toLowerCase()?.trim()
+    if (name) byName.set(name, (byName.get(name) ?? 0) + 1)
+    const email = a.customer_email?.toLowerCase()?.trim()
+    if (email) byEmail.set(email, (byEmail.get(email) ?? 0) + 1)
+  }
+  return { byName, byEmail }
+}
+
+function appointmentCountFor(
+  name: string | null | undefined,
+  email: string | null | undefined,
+  byName: Map<string, number>,
+  byEmail: Map<string, number>,
+): number {
+  const normEmail = email?.toLowerCase()?.trim()
+  if (normEmail) {
+    const c = byEmail.get(normEmail)
+    if (c !== undefined) return c
+  }
+  const normName = name?.toLowerCase()?.trim()
+  if (normName) {
+    return byName.get(normName) ?? 0
+  }
+  return 0
 }

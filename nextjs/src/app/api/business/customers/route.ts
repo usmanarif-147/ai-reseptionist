@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticateAndGetBusiness } from '@/lib/auth'
-import { deriveCustomerType } from '@/lib/widget-customer-type'
+import { classifyVisitor } from '@/lib/widget-customer-type'
 
 export async function GET(request: NextRequest) {
   const auth = await authenticateAndGetBusiness()
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
   const allResults = (customers ?? []).map((c) => {
     const customerName = c.name?.toLowerCase()?.trim()
     const totalAppointments = customerName ? (appointmentCountByName.get(customerName) || 0) : 0
-    const type = deriveCustomerType(c.total_sessions, totalAppointments)
+    const type = classifyVisitor({ kind: 'identified', totalAppointments })
     return {
       id: c.id,
       email: c.email,

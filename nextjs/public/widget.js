@@ -534,6 +534,7 @@
         message: userMsg,
         customer_id: sessionStorage.getItem('ai-widget-customer-id-' + businessId) || null,
         known_customer: !!localStorage.getItem(emailKey),
+        visitor_id: visitorId,
       })
     }).then(function(response) {
       if (!response.ok) {

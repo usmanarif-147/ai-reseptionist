@@ -20,11 +20,11 @@ interface SetupStatus {
 }
 
 interface VisitorOverview {
-  total_widget_opens: number
+  total_conversations: number
   unique_visitors: number
   new_visitors: number
   returning_visitors: number
-  anonymous_visitors: number
+  anonymous_chatters: number
 }
 
 interface ConversationStats {
@@ -35,10 +35,29 @@ interface ConversationStats {
   off_topic_sessions: number
 }
 
+interface WidgetFunnel {
+  opens: number
+  engaged: number
+  leads: number
+  customers: number
+  open_to_chat_pct: number
+  chat_to_lead_pct: number
+  lead_to_customer_pct: number
+}
+
+interface VisitorBreakdown {
+  customer: number
+  lead: number
+  frequent_visitor: number
+  one_time_visitor: number
+}
+
 interface WidgetStats {
   visitorOverview: VisitorOverview
   conversationStats: ConversationStats
   intentBreakdown: Record<string, number>
+  funnel: WidgetFunnel
+  visitorBreakdown: VisitorBreakdown
 }
 
 type RangeKey = 'today' | '7d' | '30d' | 'custom'
@@ -135,6 +154,8 @@ export default function OverviewPage() {
         visitorOverview: json.visitorOverview,
         conversationStats: json.conversationStats,
         intentBreakdown: json.intentBreakdown,
+        funnel: json.funnel,
+        visitorBreakdown: json.visitorBreakdown,
       })
     } catch (err: unknown) {
       setStatsError(err instanceof Error ? err.message : 'Failed to load statistics')
@@ -176,7 +197,6 @@ export default function OverviewPage() {
         }
       />
 
-      {/* Setup Checklist */}
       <div className="bg-blue-50 border border-blue-100 rounded-xl p-6 mb-8 max-w-2xl">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-base font-semibold text-blue-900">Setup Checklist</h2>
@@ -222,6 +242,8 @@ export default function OverviewPage() {
         <StatsLoadingSkeleton />
       ) : stats ? (
         <div className="space-y-10">
+          <WidgetFunnelSection data={stats.funnel} />
+          <VisitorBreakdownSection data={stats.visitorBreakdown} />
           <VisitorOverviewSection data={stats.visitorOverview} />
           <ConversationStatsSection data={stats.conversationStats} />
           <IntentBreakdownSection data={stats.intentBreakdown} />
@@ -235,16 +257,90 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
   return <h2 className="text-base font-semibold text-gray-900 mb-4">{children}</h2>
 }
 
+function WidgetFunnelSection({ data }: { data: WidgetFunnel }) {
+  const steps: { label: string; value: number }[] = [
+    { label: 'Launcher Opens', value: data.opens },
+    { label: 'Engaged Conversations', value: data.engaged },
+    { label: 'Leads Captured', value: data.leads },
+    { label: 'Customers', value: data.customers },
+  ]
+
+  const conversions: { label: string; pct: number }[] = [
+    { label: 'Open → Chat', pct: data.open_to_chat_pct },
+    { label: 'Chat → Lead', pct: data.chat_to_lead_pct },
+    { label: 'Lead → Customer', pct: data.lead_to_customer_pct },
+  ]
+
+  return (
+    <section>
+      <SectionHeading>Widget Funnel</SectionHeading>
+      <div className="flex flex-col lg:flex-row lg:items-stretch gap-4">
+        {steps.map((step, i) => (
+          <div key={step.label} className="flex flex-col lg:flex-row lg:items-stretch gap-4 lg:flex-1">
+            <div className="flex-1">
+              <StatCard label={step.label} value={step.value} />
+            </div>
+            {i < conversions.length && (
+              <div className="flex items-center justify-center lg:flex-shrink-0">
+                <div className="inline-flex flex-col items-center gap-0.5 px-3 py-2 rounded-full bg-gray-50 border border-gray-200">
+                  <span className="text-sm font-semibold text-gray-900">{conversions[i].pct}%</span>
+                  <span className="text-[11px] text-gray-500 whitespace-nowrap">{conversions[i].label}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function VisitorBreakdownSection({ data }: { data: VisitorBreakdown }) {
+  const tiers: { label: string; value: number; accent: string }[] = [
+    { label: 'Customers', value: data.customer, accent: 'bg-green-500' },
+    { label: 'Leads', value: data.lead, accent: 'bg-blue-500' },
+    { label: 'Frequent Visitors', value: data.frequent_visitor, accent: 'bg-purple-500' },
+    { label: 'One-Time Visitors', value: data.one_time_visitor, accent: 'bg-gray-400' },
+  ]
+
+  const total = tiers.reduce((sum, t) => sum + t.value, 0)
+
+  return (
+    <section>
+      <SectionHeading>Visitor Breakdown</SectionHeading>
+      <div className="bg-white rounded-xl border border-gray-100 p-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {tiers.map((tier) => {
+            const share = total > 0 ? Math.round((tier.value / total) * 100) : 0
+            return (
+              <div key={tier.label}>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`inline-block w-2 h-2 rounded-full ${tier.accent}`} />
+                  <span className="text-sm text-gray-600">{tier.label}</span>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl font-semibold text-gray-900">{tier.value}</span>
+                  <span className="text-xs text-gray-500">{share}% of total</span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function VisitorOverviewSection({ data }: { data: VisitorOverview }) {
   return (
     <section>
       <SectionHeading>Visitor Overview</SectionHeading>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <StatCard label="Total Widget Opens" value={data.total_widget_opens} />
+        <StatCard label="Total Conversations" value={data.total_conversations} />
         <StatCard label="Unique Visitors" value={data.unique_visitors} />
         <StatCard label="New Visitors" value={data.new_visitors} />
         <StatCard label="Returning Visitors" value={data.returning_visitors} />
-        <StatCard label="Anonymous Visitors" value={data.anonymous_visitors} />
+        <StatCard label="Anonymous Chatters" value={data.anonymous_chatters} />
       </div>
     </section>
   )

@@ -1,7 +1,12 @@
-export function deriveCustomerType(totalSessions: number, totalAppointments: number): string {
-  if (totalAppointments >= 3) return 'regular_customer'
-  if (totalAppointments >= 1) return 'booked_customer'
-  if (totalSessions >= 3 && totalAppointments === 0) return 'interested_prospect'
-  if (totalSessions > 1 && totalAppointments === 0) return 'returning_visitor'
-  return 'new_visitor'
+export type VisitorTier = 'customer' | 'lead' | 'frequent_visitor' | 'one_time_visitor'
+
+export type ClassifierInput =
+  | { kind: 'identified'; totalAppointments: number }
+  | { kind: 'anonymous'; sessionCount: number }
+
+export function classifyVisitor(input: ClassifierInput): VisitorTier {
+  if (input.kind === 'identified') {
+    return input.totalAppointments >= 1 ? 'customer' : 'lead'
+  }
+  return input.sessionCount >= 2 ? 'frequent_visitor' : 'one_time_visitor'
 }

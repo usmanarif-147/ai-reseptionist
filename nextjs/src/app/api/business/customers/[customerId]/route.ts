@@ -1,13 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticateAndGetBusiness } from '@/lib/auth'
-
-function deriveCustomerType(totalSessions: number, totalAppointments: number): string {
-  if (totalAppointments >= 3) return 'regular_customer'
-  if (totalAppointments >= 1) return 'booked_customer'
-  if (totalSessions >= 3 && totalAppointments === 0) return 'interested_prospect'
-  if (totalSessions > 1 && totalAppointments === 0) return 'returning_visitor'
-  return 'new_visitor'
-}
+import { classifyVisitor } from '@/lib/widget-customer-type'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -61,7 +54,7 @@ export async function GET(
     .order('created_at', { ascending: false })
     .limit(10)
 
-  const type = deriveCustomerType(customer.total_sessions, totalAppointments)
+  const type = classifyVisitor({ kind: 'identified', totalAppointments })
 
   return NextResponse.json({
     id: customer.id,
