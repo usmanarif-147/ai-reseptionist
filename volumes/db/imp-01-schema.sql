@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS service_custom_fields (
 -- RLS: each business owner only sees their own custom field definitions
 ALTER TABLE service_custom_fields ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "owner_access" ON service_custom_fields;
 CREATE POLICY "owner_access" ON service_custom_fields
   FOR ALL USING (
     business_id IN (
