@@ -5,7 +5,6 @@
 export type VisibilityMode = 'active_only' | 'all' | 'hide_specific'
 export type TooltipPosition = 'side' | 'above'
 export type TypingIndicatorStyle = 'animated_dots' | 'text_only' | 'disabled'
-export type IntentBorderRadius = 'sharp' | 'rounded' | 'pill'
 
 export interface AppearanceSettings {
   color: string
@@ -15,12 +14,6 @@ export interface AppearanceSettings {
   tooltip_bg_color: string
   tooltip_text_color: string
   tooltip_position: TooltipPosition
-  intent_title: string
-  intent_description: string
-  intent_color_1: string
-  intent_color_2: string
-  intent_color_3: string
-  intent_border_radius: IntentBorderRadius
   avatar_enabled: boolean
   avatar_selection: string
   header_show_status: boolean
@@ -69,12 +62,6 @@ export const AVATAR_OPTIONS = [
   { id: 'rocket', label: 'Rocket', emoji: '\uD83D\uDE80' },
 ]
 
-export const BORDER_RADIUS_OPTIONS = [
-  { id: 'sharp', label: 'Sharp', value: '4px' },
-  { id: 'rounded', label: 'Rounded', value: '14px' },
-  { id: 'pill', label: 'Pill', value: '28px' },
-]
-
 export const DEFAULT_APPEARANCE: AppearanceSettings = {
   color: '#2563EB',
   welcome_message: 'Hi there! How can I help you today?',
@@ -83,12 +70,6 @@ export const DEFAULT_APPEARANCE: AppearanceSettings = {
   tooltip_bg_color: '#FFFFFF',
   tooltip_text_color: '#1F2937',
   tooltip_position: 'side',
-  intent_title: 'How can we help you?',
-  intent_description: 'Select an option to get started',
-  intent_color_1: '#3B82F6',
-  intent_color_2: '#10B981',
-  intent_color_3: '#F59E0B',
-  intent_border_radius: 'rounded',
   avatar_enabled: true,
   avatar_selection: 'robot',
   header_show_status: true,

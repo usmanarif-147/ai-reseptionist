@@ -3,12 +3,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { type AppearanceSettings } from './shared'
 
-type PreviewScreen = 'launcher' | 'intent' | 'prechat' | 'chat' | 'feedback' | 'ended' | 'expired'
+type PreviewScreen = 'launcher' | 'chat' | 'feedback' | 'ended' | 'expired'
 
 const SCREEN_OPTIONS: ReadonlyArray<readonly [PreviewScreen, string]> = [
   ['launcher', 'Launcher'],
-  ['intent', 'Intent'],
-  ['prechat', 'Pre-Chat'],
   ['chat', 'Chat'],
   ['feedback', 'Feedback'],
   ['ended', 'Ended'],
@@ -19,7 +17,7 @@ const PREVIEW_SRC = '/widget-preview.html?preview=1'
 
 export default function WidgetPreview({ appearance }: { appearance: AppearanceSettings }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
-  const [screen, setScreen] = useState<PreviewScreen>('intent')
+  const [screen, setScreen] = useState<PreviewScreen>('launcher')
   const [iframeReady, setIframeReady] = useState(false)
 
   useEffect(() => {
